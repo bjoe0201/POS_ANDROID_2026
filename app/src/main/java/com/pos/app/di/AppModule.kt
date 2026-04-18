@@ -3,6 +3,7 @@ package com.pos.app.di
 import android.content.Context
 import com.pos.app.data.datastore.SettingsDataStore
 import com.pos.app.data.db.AppDatabase
+import com.pos.app.data.db.dao.MenuGroupDao
 import com.pos.app.data.db.dao.MenuItemDao
 import com.pos.app.data.db.dao.OrderDao
 import com.pos.app.data.db.dao.OrderItemDao
@@ -21,6 +22,9 @@ object AppModule {
     @Provides @Singleton
     fun provideDatabase(@ApplicationContext ctx: Context): AppDatabase =
         AppDatabase.getInstance(ctx)
+
+    @Provides @Singleton
+    fun provideMenuGroupDao(db: AppDatabase): MenuGroupDao = db.menuGroupDao()
 
     @Provides @Singleton
     fun provideMenuItemDao(db: AppDatabase): MenuItemDao = db.menuItemDao()

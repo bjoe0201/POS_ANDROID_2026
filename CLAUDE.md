@@ -29,6 +29,17 @@
 
 在 Windows 上請使用 `gradlew.bat` 取代 `./gradlew`。
 
+## 版本更新方式
+
+- 版本參數統一維護在 `gradle.properties`：
+  - `APP_VERSION_CODE`：整數，每次發版都要遞增。
+  - `APP_VERSION_NAME`：顯示版號，建議使用 `major.minor.patch`（例如 `1.0.1`）。
+- `app/build.gradle.kts` 會讀取上述參數並寫入 `defaultConfig.versionCode` 與 `defaultConfig.versionName`。
+- 更新流程：
+  1. 修改 `gradle.properties` 的 `APP_VERSION_CODE` 與 `APP_VERSION_NAME`。
+  2. 重新建置（Windows：`gradlew.bat assembleDebug` 或 `gradlew.bat assembleRelease`）。
+  3. 登入頁與主程式畫面的版號顯示會自動跟著更新。
+
 ## 架構
 
 **套件：** `com.pos.app` | **Min SDK：** 29（Android 10）| **Target SDK：** 35
@@ -39,7 +50,7 @@
 data/
   datastore/SettingsDataStore.kt   — 以 Jetpack DataStore 儲存 PIN 雜湊（SHA-256）
   db/
-    entity/                        — Room entities（4 張資料表）
+    entity/                        — Room entities（5 張資料表）
     dao/                           — Room DAOs
     AppDatabase.kt                 — 單例；首次建立時預植入預設菜單與 8 張桌號
   repository/                      — 單一資料真實來源；透過 Hilt 注入至 ViewModels
@@ -61,9 +72,10 @@ Settings 僅可由記帳與報表分頁的圖示進入。
 
 | Table | Key fields |
 |-------|-----------|
+| `menu_groups` | code, name, sortOrder, isActive |
 | `menu_items` | id, name, price, category, isAvailable, sortOrder |
 | `orders` | id, **tableId** (FK→tables), **tableName** (snapshot), remark, createdAt, closedAt, status |
-| `order_items` | id, orderId, menuItemId, name/price (snapshot), quantity |
+| `order_items` | id, orderId, menuItemId, name/price (snapshot), **menuGroupCode/menuGroupName (snapshot)**, quantity |
 | `tables` | id, tableName (≤20 chars), seats, remark, isActive, sortOrder |
 
 `OrderEntity.tableName` 是快照欄位——即使桌號後續被重新命名或刪除，仍可維持可讀性。

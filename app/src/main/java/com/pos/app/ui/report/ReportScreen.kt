@@ -12,11 +12,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.pos.app.R
 import com.pos.app.ui.theme.Red700
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -26,6 +28,7 @@ import java.util.Locale
 @Composable
 fun ReportScreen(
     onGoSettings: () -> Unit,
+    appVersion: String,
     viewModel: ReportViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -58,8 +61,16 @@ fun ReportScreen(
             TopAppBar(
                 title = { Text("報表", fontWeight = FontWeight.Bold) },
                 actions = {
-                    IconButton(onClick = onGoSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "設定", tint = Color.White)
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            text = stringResource(R.string.app_version, appVersion),
+                            color = Color.White.copy(alpha = 0.8f),
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier.padding(end = 4.dp, bottom = 8.dp)
+                        )
+                        IconButton(onClick = onGoSettings) {
+                            Icon(Icons.Default.Settings, contentDescription = "設定", tint = Color.White)
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Red700, titleContentColor = Color.White)
@@ -124,6 +135,24 @@ fun ReportScreen(
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text(name, fontSize = 14.sp)
                         Text("$qty 份", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Red700)
+                    }
+                }
+                item { HorizontalDivider() }
+            }
+
+            if (uiState.groupRanking.isNotEmpty()) {
+                item { Text("群組銷售排行", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Red700) }
+                items(uiState.groupRanking) { group ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(group.groupName, fontSize = 14.sp)
+                            Text("${group.quantity} 份", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
+                        }
+                        Text("NT$ %.0f".format(group.revenue), fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Red700)
                     }
                 }
                 item { HorizontalDivider() }

@@ -1,5 +1,8 @@
 package com.pos.app.ui.navigation
 
+import android.os.Build
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assessment
@@ -10,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -71,6 +75,20 @@ private fun HomeWithBottomNav(onGoSettings: () -> Unit) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val context = LocalContext.current
+    val versionName = remember {
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(
+                    context.packageName,
+                    android.content.pm.PackageManager.PackageInfoFlags.of(0)
+                ).versionName
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0).versionName
+            }
+        }.getOrNull() ?: "N/A"
+    }
 
     Scaffold(
         bottomBar = {
@@ -99,15 +117,25 @@ private fun HomeWithBottomNav(onGoSettings: () -> Unit) {
             }
         }
     ) { padding ->
-        NavHost(
-            navController = navController,
-            startDestination = Screen.Order.route,
-            modifier = Modifier.padding(padding)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
         ) {
-            composable(Screen.Order.route) { OrderScreen(onGoSettings = onGoSettings) }
-            composable(Screen.ItemSetting.route) { MenuManagementScreen() }
-            composable(Screen.TableSetting.route) { TableSettingScreen() }
-            composable(Screen.Report.route) { ReportScreen(onGoSettings = onGoSettings) }
+            NavHost(
+                navController = navController,
+                startDestination = Screen.Order.route,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                composable(Screen.Order.route) {
+                    OrderScreen(onGoSettings = onGoSettings, appVersion = versionName)
+                }
+                composable(Screen.ItemSetting.route) { MenuManagementScreen() }
+                composable(Screen.TableSetting.route) { TableSettingScreen() }
+                composable(Screen.Report.route) {
+                    ReportScreen(onGoSettings = onGoSettings, appVersion = versionName)
+                }
+            }
         }
     }
 }

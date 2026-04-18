@@ -2,10 +2,12 @@ package com.pos.app.ui.order
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.pos.app.data.db.entity.MenuGroupEntity
 import com.pos.app.data.db.entity.MenuItemEntity
 import com.pos.app.data.db.entity.OrderEntity
 import com.pos.app.data.db.entity.OrderItemEntity
 import com.pos.app.data.db.entity.TableEntity
+import com.pos.app.data.repository.MenuGroupRepository
 import com.pos.app.data.repository.MenuRepository
 import com.pos.app.data.repository.OrderRepository
 import com.pos.app.data.repository.TableRepository
@@ -26,6 +28,7 @@ val CATEGORIES = listOf(
 )
 
 data class OrderUiState(
+    val groups: List<MenuGroupEntity> = emptyList(),
     val tables: List<TableEntity> = emptyList(),
     val selectedTable: TableEntity? = null,
     val order: OrderEntity? = null,
@@ -41,6 +44,7 @@ data class OrderUiState(
 @HiltViewModel
 class OrderViewModel @Inject constructor(
     private val orderRepository: OrderRepository,
+    private val menuGroupRepository: MenuGroupRepository,
     private val menuRepository: MenuRepository,
     private val tableRepository: TableRepository
 ) : ViewModel() {
@@ -49,8 +53,20 @@ class OrderViewModel @Inject constructor(
     val uiState: StateFlow<OrderUiState> = _uiState.asStateFlow()
 
     private var orderObserveJob: Job? = null
+    private var menuObserveJob: Job? = null
 
     init {
+        menuGroupRepository.getActiveGroups()
+            .onEach { groups ->
+                val selectedCategory = _uiState.value.selectedCategory
+                    .takeIf { code -> groups.any { it.code == code } }
+                    ?: groups.firstOrNull()?.code.orEmpty()
+
+                _uiState.update { it.copy(groups = groups, selectedCategory = selectedCategory) }
+                observeMenuForCategory(selectedCategory)
+            }
+            .launchIn(viewModelScope)
+
         tableRepository.getActiveTables()
             .onEach { tables ->
                 val current = _uiState.value.selectedTable
@@ -58,10 +74,6 @@ class OrderViewModel @Inject constructor(
                 _uiState.update { it.copy(tables = tables, selectedTable = stillActive ?: tables.firstOrNull()) }
                 loadOrderForSelected()
             }
-            .launchIn(viewModelScope)
-
-        menuRepository.getItemsByCategory(_uiState.value.selectedCategory)
-            .onEach { items -> _uiState.update { it.copy(menuItems = items) } }
             .launchIn(viewModelScope)
     }
 
@@ -87,9 +99,7 @@ class OrderViewModel @Inject constructor(
 
     fun selectCategory(category: String) {
         _uiState.update { it.copy(selectedCategory = category) }
-        menuRepository.getItemsByCategory(category)
-            .onEach { items -> _uiState.update { it.copy(menuItems = items) } }
-            .launchIn(viewModelScope)
+        observeMenuForCategory(category)
     }
 
     fun addItem(menuItem: MenuItemEntity) {
@@ -97,14 +107,30 @@ class OrderViewModel @Inject constructor(
         viewModelScope.launch {
             val orderId = _uiState.value.order?.id
                 ?: orderRepository.createOrder(table.id, table.tableName)
-            orderRepository.addOrUpdateItem(orderId, menuItem.id, menuItem.name, menuItem.price, 1)
+            orderRepository.addOrUpdateItem(
+                orderId = orderId,
+                menuItemId = menuItem.id,
+                name = menuItem.name,
+                price = menuItem.price,
+                menuGroupCode = menuItem.category,
+                menuGroupName = resolveGroupName(menuItem.category),
+                delta = 1
+            )
         }
     }
 
     fun removeItem(menuItem: MenuItemEntity) {
         viewModelScope.launch {
             val orderId = _uiState.value.order?.id ?: return@launch
-            orderRepository.addOrUpdateItem(orderId, menuItem.id, menuItem.name, menuItem.price, -1)
+            orderRepository.addOrUpdateItem(
+                orderId = orderId,
+                menuItemId = menuItem.id,
+                name = menuItem.name,
+                price = menuItem.price,
+                menuGroupCode = menuItem.category,
+                menuGroupName = resolveGroupName(menuItem.category),
+                delta = -1
+            )
         }
     }
 
@@ -134,4 +160,19 @@ class OrderViewModel @Inject constructor(
 
     fun getQuantityInOrder(menuItemId: Long): Int =
         _uiState.value.orderItems.find { it.menuItemId == menuItemId }?.quantity ?: 0
+
+    private fun observeMenuForCategory(category: String) {
+        menuObserveJob?.cancel()
+        if (category.isBlank()) {
+            _uiState.update { it.copy(menuItems = emptyList()) }
+            return
+        }
+
+        menuObserveJob = menuRepository.getItemsByCategory(category)
+            .onEach { items -> _uiState.update { it.copy(menuItems = items) } }
+            .launchIn(viewModelScope)
+    }
+
+    private fun resolveGroupName(code: String): String =
+        _uiState.value.groups.find { it.code == code }?.name ?: code
 }

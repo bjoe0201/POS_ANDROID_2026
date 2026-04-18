@@ -20,10 +20,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.pos.app.R
 import com.pos.app.data.db.entity.MenuItemEntity
 import com.pos.app.data.db.entity.OrderItemEntity
 import com.pos.app.data.db.entity.TableEntity
@@ -34,6 +36,7 @@ import com.pos.app.ui.theme.Red700
 @Composable
 fun OrderScreen(
     onGoSettings: () -> Unit,
+    appVersion: String,
     viewModel: OrderViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -42,6 +45,8 @@ fun OrderScreen(
 
     if (showCheckout) {
         CheckoutDialog(
+            tableName = uiState.selectedTable?.tableName ?: "",
+            orderItems = uiState.orderItems,
             total = uiState.total,
             remark = uiState.remark,
             onRemarkChange = { viewModel.updateRemark(it) },
@@ -81,8 +86,16 @@ fun OrderScreen(
                     fontWeight = FontWeight.Bold,
                     fontSize = 20.sp
                 )
-                IconButton(onClick = onGoSettings) {
-                    Icon(Icons.Default.Settings, contentDescription = "設定", tint = Color.White)
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = stringResource(R.string.app_version, appVersion),
+                        color = Color.White.copy(alpha = 0.8f),
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(end = 4.dp, bottom = 8.dp)
+                    )
+                    IconButton(onClick = onGoSettings) {
+                        Icon(Icons.Default.Settings, contentDescription = "設定", tint = Color.White)
+                    }
                 }
             }
         }
@@ -103,11 +116,11 @@ fun OrderScreen(
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(CATEGORIES) { (code, label) ->
+                    items(uiState.groups, key = { it.code }) { group ->
                         FilterChip(
-                            selected = uiState.selectedCategory == code,
-                            onClick = { viewModel.selectCategory(code) },
-                            label = { Text(label) },
+                            selected = uiState.selectedCategory == group.code,
+                            onClick = { viewModel.selectCategory(group.code) },
+                            label = { Text(group.name) },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = Red700,
                                 selectedLabelColor = Color.White
@@ -312,6 +325,8 @@ private fun OrderItemRow(item: OrderItemEntity, onDelete: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CheckoutDialog(
+    tableName: String,
+    orderItems: List<OrderItemEntity>,
     total: Double,
     remark: String,
     onRemarkChange: (String) -> Unit,
@@ -320,15 +335,67 @@ private fun CheckoutDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("確認結帳", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    "NT$ %.0f".format(total),
-                    fontSize = 36.sp,
-                    fontWeight = FontWeight.ExtraBold,
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("確認結帳", fontWeight = FontWeight.Bold)
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
                     color = Red700
-                )
+                ) {
+                    Text(
+                        tableName,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                // 訂單明細
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    orderItems.forEach { item ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                "${item.name} × ${item.quantity}",
+                                fontSize = 14.sp,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                "NT$ %.0f".format(item.price * item.quantity),
+                                fontSize = 14.sp,
+                                color = Red700
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider()
+
+                // 合計
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("合計", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text(
+                        "NT$ %.0f".format(total),
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Red700
+                    )
+                }
+
                 OutlinedTextField(
                     value = remark,
                     onValueChange = onRemarkChange,

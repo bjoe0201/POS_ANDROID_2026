@@ -53,4 +53,34 @@ class TableSettingViewModel @Inject constructor(
     fun toggleActive(table: TableEntity) {
         viewModelScope.launch { tableRepository.setActive(table.id, !table.isActive) }
     }
+
+    fun moveTableUp(table: TableEntity) {
+        val tables = _uiState.value.tables
+        val index = tables.indexOfFirst { it.id == table.id }
+        if (index <= 0) return
+        reorderAndPersist(tables, fromIndex = index, toIndex = index - 1)
+    }
+
+    fun moveTableDown(table: TableEntity) {
+        val tables = _uiState.value.tables
+        val index = tables.indexOfFirst { it.id == table.id }
+        if (index == -1 || index >= tables.lastIndex) return
+        reorderAndPersist(tables, fromIndex = index, toIndex = index + 1)
+    }
+
+    private fun reorderAndPersist(tables: List<TableEntity>, fromIndex: Int, toIndex: Int) {
+        val reordered = tables.toMutableList().apply {
+            val moving = removeAt(fromIndex)
+            add(toIndex, moving)
+        }
+
+        viewModelScope.launch {
+            reordered.forEachIndexed { index, table ->
+                val newSortOrder = index + 1
+                if (table.sortOrder != newSortOrder) {
+                    tableRepository.update(table.copy(sortOrder = newSortOrder))
+                }
+            }
+        }
+    }
 }

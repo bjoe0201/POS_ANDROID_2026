@@ -21,5 +21,7 @@ data class OrderItemEntity(
     val menuItemId: Long,
     val name: String,      // snapshot at time of order
     val price: Double,     // snapshot at time of order
+    val menuGroupCode: String,
+    val menuGroupName: String,
     val quantity: Int
 )

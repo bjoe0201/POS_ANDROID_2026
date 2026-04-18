@@ -19,6 +19,12 @@ data class OrderWithItems(
     val items: List<OrderItemEntity>
 )
 
+data class GroupSalesStat(
+    val groupName: String,
+    val quantity: Int,
+    val revenue: Double
+)
+
 data class ReportUiState(
     val dateRange: DateRange = DateRange.TODAY,
     val showDeleted: Boolean = false,
@@ -27,6 +33,7 @@ data class ReportUiState(
     val totalOrders: Int = 0,
     val avgOrderValue: Double = 0.0,
     val itemRanking: List<Pair<String, Int>> = emptyList(),
+    val groupRanking: List<GroupSalesStat> = emptyList(),
     val message: String? = null,
     val isLoading: Boolean = true
 )
@@ -85,10 +92,18 @@ class ReportViewModel @Inject constructor(
 
         val totalRevenue = orderWithItems.sumOf { owi -> owi.items.sumOf { it.price * it.quantity } }
         val itemMap = mutableMapOf<String, Int>()
+        val groupMap = mutableMapOf<String, Pair<Int, Double>>()
         orderWithItems.forEach { owi -> owi.items.forEach { item ->
             itemMap[item.name] = (itemMap[item.name] ?: 0) + item.quantity
+            val groupName = item.menuGroupName.ifBlank { "未分組" }
+            val currentGroup = groupMap[groupName] ?: (0 to 0.0)
+            groupMap[groupName] = (currentGroup.first + item.quantity) to (currentGroup.second + item.price * item.quantity)
         }}
         val ranking = itemMap.entries.sortedByDescending { it.value }.take(10).map { it.key to it.value }
+        val groupRanking = groupMap.entries
+            .sortedByDescending { it.value.second }
+            .take(10)
+            .map { (name, summary) -> GroupSalesStat(name, summary.first, summary.second) }
 
         _uiState.update {
             it.copy(
@@ -97,6 +112,7 @@ class ReportViewModel @Inject constructor(
                 totalOrders = orderWithItems.size,
                 avgOrderValue = if (orderWithItems.isEmpty()) 0.0 else totalRevenue / orderWithItems.size,
                 itemRanking = ranking,
+                groupRanking = groupRanking,
                 isLoading = false
             )
         }

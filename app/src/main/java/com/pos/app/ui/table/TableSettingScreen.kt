@@ -2,11 +2,13 @@ package com.pos.app.ui.table
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
@@ -58,9 +60,13 @@ fun TableSettingScreen(viewModel: TableSettingViewModel = hiltViewModel()) {
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            items(uiState.tables, key = { it.id }) { table ->
+            itemsIndexed(uiState.tables, key = { _, table -> table.id }) { index, table ->
                 TableRow(
                     table = table,
+                    canMoveUp = index > 0,
+                    canMoveDown = index < uiState.tables.lastIndex,
+                    onMoveUp = { viewModel.moveTableUp(table) },
+                    onMoveDown = { viewModel.moveTableDown(table) },
                     onEdit = { viewModel.showEditDialog(table) },
                     onDelete = { viewModel.deleteTable(table) },
                     onToggle = { viewModel.toggleActive(table) }
@@ -83,6 +89,10 @@ fun TableSettingScreen(viewModel: TableSettingViewModel = hiltViewModel()) {
 @Composable
 private fun TableRow(
     table: TableEntity,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onToggle: () -> Unit
@@ -111,6 +121,17 @@ private fun TableRow(
                 }
                 if (detail.isNotBlank()) {
                     Text(detail, fontSize = 13.sp, color = MaterialTheme.colorScheme.outline)
+                }
+            }
+            Column(
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                IconButton(onClick = onMoveUp, enabled = canMoveUp) {
+                    Icon(Icons.Default.ArrowUpward, contentDescription = "上移", tint = Red700)
+                }
+                IconButton(onClick = onMoveDown, enabled = canMoveDown) {
+                    Icon(Icons.Default.ArrowDownward, contentDescription = "下移", tint = Red700)
                 }
             }
             Switch(

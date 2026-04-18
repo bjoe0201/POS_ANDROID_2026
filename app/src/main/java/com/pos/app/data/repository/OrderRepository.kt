@@ -26,11 +26,27 @@ class OrderRepository @Inject constructor(
     suspend fun createOrder(tableId: Long, tableName: String): Long =
         orderDao.insert(OrderEntity(tableId = tableId, tableName = tableName))
 
-    suspend fun addOrUpdateItem(orderId: Long, menuItemId: Long, name: String, price: Double, delta: Int) {
+    suspend fun addOrUpdateItem(
+        orderId: Long,
+        menuItemId: Long,
+        name: String,
+        price: Double,
+        menuGroupCode: String,
+        menuGroupName: String,
+        delta: Int
+    ) {
         val existing = orderItemDao.findItem(orderId, menuItemId)
         if (existing == null) {
             if (delta > 0) orderItemDao.insert(
-                OrderItemEntity(orderId = orderId, menuItemId = menuItemId, name = name, price = price, quantity = delta)
+                OrderItemEntity(
+                    orderId = orderId,
+                    menuItemId = menuItemId,
+                    name = name,
+                    price = price,
+                    menuGroupCode = menuGroupCode,
+                    menuGroupName = menuGroupName,
+                    quantity = delta
+                )
             )
         } else {
             val newQty = existing.quantity + delta

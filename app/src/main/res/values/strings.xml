@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">POS 餐飲系統</string>
+    <string name="app_version">版本 %1$s</string>
 </resources>

@@ -6,6 +6,9 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+val appVersionCode = providers.gradleProperty("APP_VERSION_CODE").orNull?.toIntOrNull() ?: 1
+val appVersionName = providers.gradleProperty("APP_VERSION_NAME").orNull ?: "1.0.0"
+
 android {
     namespace = "com.pos.app"
     compileSdk = 35
@@ -14,8 +17,8 @@ android {
         applicationId = "com.pos.app"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
