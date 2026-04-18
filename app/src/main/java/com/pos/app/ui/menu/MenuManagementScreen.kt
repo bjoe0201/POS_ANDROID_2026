@@ -105,6 +105,26 @@ fun MenuManagementScreen(
         )
     }
 
+    // 品項刪除確認
+    var confirmDeleteItem by remember { mutableStateOf<MenuItemEntity?>(null) }
+    if (confirmDeleteItem != null) {
+        val item = confirmDeleteItem!!
+        AlertDialog(
+            onDismissRequest = { confirmDeleteItem = null },
+            title = { Text("刪除品項") },
+            text = { Text("確定刪除「${item.name}」？此操作無法復原。") },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.deleteItem(item); confirmDeleteItem = null },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("刪除") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDeleteItem = null }) { Text("取消") }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -156,16 +176,20 @@ fun MenuManagementScreen(
                 contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                val items = uiState.allItems.filter { it.category == uiState.selectedCategory }
-                items(items, key = { it.id }) { item ->
+                val filteredItems = uiState.allItems.filter { it.category == uiState.selectedCategory }
+                itemsIndexed(filteredItems, key = { _, it -> it.id }) { index, item ->
                     MenuManagementItemRow(
                         item = item,
+                        canMoveUp = index > 0,
+                        canMoveDown = index < filteredItems.lastIndex,
+                        onMoveUp = { viewModel.moveItemUp(item, filteredItems) },
+                        onMoveDown = { viewModel.moveItemDown(item, filteredItems) },
                         onEdit = { viewModel.showEditDialog(item) },
-                        onDelete = { viewModel.deleteItem(item) },
+                        onDelete = { confirmDeleteItem = item },
                         onToggle = { viewModel.toggleAvailability(item) }
                     )
                 }
-                if (items.isEmpty()) {
+                if (filteredItems.isEmpty()) {
                     item {
                         Text(
                             "此分類尚無品項",
@@ -349,6 +373,10 @@ private fun AddEditGroupDialog(
 @Composable
 private fun MenuManagementItemRow(
     item: MenuItemEntity,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onToggle: () -> Unit
@@ -363,6 +391,18 @@ private fun MenuManagementItemRow(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                IconButton(onClick = onMoveUp, enabled = canMoveUp, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.ArrowUpward, contentDescription = "上移", tint = if (canMoveUp) Red700 else MaterialTheme.colorScheme.outline, modifier = Modifier.size(18.dp))
+                }
+                IconButton(onClick = onMoveDown, enabled = canMoveDown, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.ArrowDownward, contentDescription = "下移", tint = if (canMoveDown) Red700 else MaterialTheme.colorScheme.outline, modifier = Modifier.size(18.dp))
+                }
+            }
+            Spacer(modifier = Modifier.width(8.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     item.name,

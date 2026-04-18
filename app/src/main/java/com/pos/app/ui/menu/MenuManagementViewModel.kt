@@ -141,6 +141,33 @@ class MenuManagementViewModel @Inject constructor(
         viewModelScope.launch { menuRepository.delete(item) }
     }
 
+    fun moveItemUp(item: MenuItemEntity, filteredItems: List<MenuItemEntity>) {
+        val index = filteredItems.indexOfFirst { it.id == item.id }
+        if (index <= 0) return
+        reorderItemsAndPersist(filteredItems, index, index - 1)
+    }
+
+    fun moveItemDown(item: MenuItemEntity, filteredItems: List<MenuItemEntity>) {
+        val index = filteredItems.indexOfFirst { it.id == item.id }
+        if (index == -1 || index >= filteredItems.lastIndex) return
+        reorderItemsAndPersist(filteredItems, index, index + 1)
+    }
+
+    private fun reorderItemsAndPersist(items: List<MenuItemEntity>, fromIndex: Int, toIndex: Int) {
+        val reordered = items.toMutableList().apply {
+            val moving = removeAt(fromIndex)
+            add(toIndex, moving)
+        }
+        viewModelScope.launch {
+            reordered.forEachIndexed { index, menuItem ->
+                val newSortOrder = index + 1
+                if (menuItem.sortOrder != newSortOrder) {
+                    menuRepository.update(menuItem.copy(sortOrder = newSortOrder))
+                }
+            }
+        }
+    }
+
     fun toggleAvailability(item: MenuItemEntity) {
         viewModelScope.launch {
             menuRepository.setAvailability(item.id, !item.isAvailable)

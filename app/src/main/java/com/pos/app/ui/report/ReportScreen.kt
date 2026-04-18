@@ -34,6 +34,45 @@ fun ReportScreen(
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val sdf = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
+    val dateSdf = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
+    var showStartDatePicker by remember { mutableStateOf(false) }
+    var showEndDatePicker by remember { mutableStateOf(false) }
+
+    if (showStartDatePicker) {
+        val startPickerState = rememberDatePickerState(
+            initialSelectedDateMillis = uiState.customStartDate ?: System.currentTimeMillis()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showStartDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    startPickerState.selectedDateMillis?.let { viewModel.setCustomStartDate(it) }
+                    showStartDatePicker = false
+                }) { Text("確定") }
+            },
+            dismissButton = { TextButton(onClick = { showStartDatePicker = false }) { Text("取消") } }
+        ) {
+            DatePicker(state = startPickerState)
+        }
+    }
+
+    if (showEndDatePicker) {
+        val endPickerState = rememberDatePickerState(
+            initialSelectedDateMillis = uiState.customEndDate ?: uiState.customStartDate ?: System.currentTimeMillis()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showEndDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    endPickerState.selectedDateMillis?.let { viewModel.setCustomEndDate(it) }
+                    showEndDatePicker = false
+                }) { Text("確定") }
+            },
+            dismissButton = { TextButton(onClick = { showEndDatePicker = false }) { Text("取消") } }
+        ) {
+            DatePicker(state = endPickerState)
+        }
+    }
 
     // 刪除確認對話框
     var confirmDeleteId by remember { mutableStateOf<Long?>(null) }
@@ -95,7 +134,9 @@ fun ReportScreen(
                             DateRange.TODAY -> "今日"
                             DateRange.WEEK -> "本週"
                             DateRange.MONTH -> "本月"
+                            DateRange.YEAR -> "今年"
                             DateRange.ALL -> "全部"
+                            DateRange.CUSTOM -> "自訂"
                         }
                         FilterChip(
                             selected = uiState.dateRange == range,
@@ -115,6 +156,33 @@ fun ReportScreen(
                             colors = CheckboxDefaults.colors(checkedColor = Red700)
                         )
                         Text("已刪除", fontSize = 13.sp)
+                    }
+                }
+
+                if (uiState.dateRange == DateRange.CUSTOM) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedButton(onClick = { showStartDatePicker = true }, modifier = Modifier.weight(1f)) {
+                            Text(
+                                uiState.customStartDate?.let { dateSdf.format(Date(it)) } ?: "開始日期"
+                            )
+                        }
+                        OutlinedButton(onClick = { showEndDatePicker = true }, modifier = Modifier.weight(1f)) {
+                            Text(
+                                uiState.customEndDate?.let { dateSdf.format(Date(it)) } ?: "結束日期"
+                            )
+                        }
+                        Button(
+                            onClick = { viewModel.applyCustomDateRange() },
+                            enabled = uiState.customStartDate != null && uiState.customEndDate != null,
+                            colors = ButtonDefaults.buttonColors(containerColor = Red700)
+                        ) {
+                            Text("套用")
+                        }
                     }
                 }
             }
