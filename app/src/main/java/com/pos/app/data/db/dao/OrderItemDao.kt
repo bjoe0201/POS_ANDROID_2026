@@ -26,4 +26,7 @@ interface OrderItemDao {
 
     @Query("SELECT * FROM order_items WHERE orderId IN (SELECT id FROM orders)")
     suspend fun getAllOrderItems(): List<OrderItemEntity>
+
+    @Query("DELETE FROM order_items")
+    suspend fun deleteAll()
 }

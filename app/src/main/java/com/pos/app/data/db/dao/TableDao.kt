@@ -29,4 +29,7 @@ interface TableDao {
 
     @Query("SELECT COUNT(*) FROM tables")
     suspend fun count(): Int
+
+    @Query("DELETE FROM tables")
+    suspend fun deleteAll()
 }

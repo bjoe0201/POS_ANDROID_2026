@@ -69,4 +69,20 @@ class SettingsViewModel @Inject constructor(
                 .onFailure { e -> _uiState.update { it.copy(message = "還原失敗: ${e.message}") } }
         }
     }
+
+    fun resetDatabase() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                appDatabase.orderItemDao().deleteAll()
+                appDatabase.orderDao().deleteAll()
+                appDatabase.menuItemDao().deleteAll()
+                appDatabase.menuGroupDao().deleteAll()
+                appDatabase.tableDao().deleteAll()
+                AppDatabase.seedDefaults(appDatabase)
+                _uiState.update { it.copy(message = "資料庫已初始化完成") }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(message = "初始化失敗: ${e.message}") }
+            }
+        }
+    }
 }

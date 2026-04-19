@@ -29,4 +29,7 @@ interface OrderDao {
 
     @Query("UPDATE orders SET status = :status, closedAt = :closedAt, remark = :remark WHERE id = :id")
     suspend fun closeOrder(id: Long, status: String, closedAt: Long, remark: String)
+
+    @Query("DELETE FROM orders")
+    suspend fun deleteAll()
 }

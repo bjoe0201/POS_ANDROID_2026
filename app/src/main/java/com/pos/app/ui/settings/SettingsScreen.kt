@@ -59,6 +59,47 @@ fun SettingsScreen(
         )
     }
 
+    // 資料庫初始化：兩步確認
+    var showResetStep2 by remember { mutableStateOf(false) }
+    var showResetStep1 by remember { mutableStateOf(false) }
+    if (showResetStep1) {
+        AlertDialog(
+            onDismissRequest = { showResetStep1 = false },
+            title = { Text("初始化前請先備份") },
+            text = { Text("初始化將清除所有訂單、菜單與桌號資料，並恢復為預設內容。\n\n⚠️ 請先執行「備份匯出」以保留目前資料，再繼續初始化。\n\n已備份，要繼續？") },
+            confirmButton = {
+                Button(
+                    onClick = { showResetStep1 = false; showResetStep2 = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = Red700)
+                ) { Text("已備份，繼續") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetStep1 = false }) { Text("取消") }
+            }
+        )
+    }
+
+    // 資料庫初始化：第二步確認（最終確認）
+    if (showResetStep2) {
+        AlertDialog(
+            onDismissRequest = { showResetStep2 = false },
+            title = { Text("確認初始化資料庫") },
+            text = { Text("此操作無法復原！\n\n所有訂單、菜單與桌號資料將被清除，並恢復為系統預設值。\n\n確定要初始化資料庫嗎？") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showResetStep2 = false
+                        viewModel.resetDatabase()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Red700)
+                ) { Text("確定初始化") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetStep2 = false }) { Text("取消") }
+            }
+        )
+    }
+
     val backupLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip")
     ) { uri -> uri?.let { viewModel.backupDb(context, it) } }
@@ -130,6 +171,23 @@ fun SettingsScreen(
                     modifier = Modifier.weight(1f)
                 ) { Text("備份匯入") }
             }
+
+            HorizontalDivider()
+
+            Text("資料庫管理", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Red700)
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                Text(
+                    "初始化將清除全部訂單、菜單與桌號，並恢復系統預設資料。\n建議先執行備份匯出再操作。",
+                    modifier = Modifier.padding(12.dp),
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    fontSize = 14.sp
+                )
+            }
+            Button(
+                onClick = { showResetStep1 = true },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Red700)
+            ) { Text("初始化資料庫") }
         }
     }
 }

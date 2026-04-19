@@ -108,9 +108,7 @@ abstract class AppDatabase : RoomDatabase() {
                             super.onCreate(db)
                             INSTANCE?.let { database ->
                                 CoroutineScope(Dispatchers.IO).launch {
-                                    seedDefaultMenuGroups(database.menuGroupDao())
-                                    seedDefaultMenu(database.menuItemDao())
-                                    seedDefaultTables(database.tableDao())
+                                    seedDefaults(database)
                                 }
                             }
                         }
@@ -118,6 +116,12 @@ abstract class AppDatabase : RoomDatabase() {
                     .build()
                     .also { INSTANCE = it }
             }
+
+        suspend fun seedDefaults(database: AppDatabase) {
+            seedDefaultMenuGroups(database.menuGroupDao())
+            seedDefaultMenu(database.menuItemDao())
+            seedDefaultTables(database.tableDao())
+        }
 
         private suspend fun seedDefaultMenuGroups(dao: MenuGroupDao) {
             dao.insertAll(DEFAULT_MENU_GROUPS)

@@ -28,5 +28,8 @@ interface MenuGroupDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(groups: List<MenuGroupEntity>)
+
+    @Query("DELETE FROM menu_groups")
+    suspend fun deleteAll()
 }
 
