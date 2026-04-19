@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.room.withTransaction
 import com.pos.app.data.db.AppDatabase
 import com.pos.app.data.repository.SettingsRepository
 import com.pos.app.util.BackupManager
@@ -73,11 +74,13 @@ class SettingsViewModel @Inject constructor(
     fun resetDatabase() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                appDatabase.orderItemDao().deleteAll()
-                appDatabase.orderDao().deleteAll()
-                appDatabase.menuItemDao().deleteAll()
-                appDatabase.menuGroupDao().deleteAll()
-                appDatabase.tableDao().deleteAll()
+                appDatabase.withTransaction {
+                    appDatabase.orderItemDao().deleteAll()
+                    appDatabase.orderDao().deleteAll()
+                    appDatabase.menuItemDao().deleteAll()
+                    appDatabase.menuGroupDao().deleteAll()
+                    appDatabase.tableDao().deleteAll()
+                }
                 AppDatabase.seedDefaults(appDatabase)
                 _uiState.update { it.copy(message = "資料庫已初始化完成") }
             } catch (e: Exception) {

@@ -60,8 +60,8 @@ fun SettingsScreen(
     }
 
     // 資料庫初始化：兩步確認
-    var showResetStep2 by remember { mutableStateOf(false) }
     var showResetStep1 by remember { mutableStateOf(false) }
+    var showResetStep2 by remember { mutableStateOf(false) }
     if (showResetStep1) {
         AlertDialog(
             onDismissRequest = { showResetStep1 = false },
