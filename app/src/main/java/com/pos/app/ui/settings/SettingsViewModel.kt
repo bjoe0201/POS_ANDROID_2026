@@ -108,14 +108,28 @@ class SettingsViewModel @Inject constructor(
         autoBackupManager.lastBackupAt
             .onEach { t -> _uiState.update { it.copy(autoBackupLastAt = t, autoBackupFiles = loadAutoBackupFiles()) } }
             .launchIn(viewModelScope)
+        // 每次備份成功都強制刷新一次（就算秒級時間戳沒變也要更新）
+        autoBackupManager.backupTick
+            .onEach {
+                _uiState.update {
+                    it.copy(
+                        autoBackupLastAt = autoBackupManager.lastBackupAt.value,
+                        autoBackupFiles = loadAutoBackupFiles(),
+                        autoBackupStorageDesc = autoBackupManager.storageDescription()
+                    )
+                }
+            }
+            .launchIn(viewModelScope)
     }
 
     private fun loadAutoBackupFiles(): List<BackupEntry> = autoBackupManager.listBackups()
 
     fun refreshAutoBackupFiles() {
+        val files = loadAutoBackupFiles()
         _uiState.update {
             it.copy(
-                autoBackupFiles = loadAutoBackupFiles(),
+                autoBackupFiles = files,
+                autoBackupLastAt = files.firstOrNull()?.lastModified ?: it.autoBackupLastAt,
                 autoBackupStorageDesc = autoBackupManager.storageDescription()
             )
         }

@@ -7,6 +7,20 @@
 
 ---
 
+## [v1.2.3] - 2026-04-24
+
+**versionCode:** 11 · **下載：** [GitHub Release](https://github.com/bjoe0201/POS_ANDROID_2026/releases/tag/v1.2.3)
+
+### 🔁 自動備份 UI 刷新修正
+- 背景觸發的自動備份 / 同秒內重複備份後，「最近自動備份」時間與備份列表未即時更新。
+- 修正：
+  - `AutoBackupManager` 新增 `backupTick` StateFlow，每次備份成功強制 emit（不受秒級時間戳精度影響）。
+  - `SettingsViewModel` 訂閱 `backupTick`，每次備份完成都重新掃描備份清單、更新最近時間與資料夾描述。
+  - `SettingsScreen.AutoBackupSection` 進入時透過 `LaunchedEffect` 主動刷新，背景備份完回到設定頁即可看到最新狀態。
+  - `refreshAutoBackupFiles()` 同步更新「最近自動備份」時間戳。
+
+---
+
 ## [v1.2.2] - 2026-04-24
 
 **versionCode:** 10 · **下載：** [GitHub Release](https://github.com/bjoe0201/POS_ANDROID_2026/releases/tag/v1.2.2)
@@ -115,6 +129,7 @@
 
 | 版本 | versionCode | 發行日 | 主題 |
 |------|:----------:|--------|------|
+| v1.2.3 | 11 | 2026-04-24 | 自動備份 UI 即時刷新修正 |
 | v1.2.2 | 10 | 2026-04-24 | 當機保護 + 自動儲存 + 收款音效 |
 | v1.2.1 |  9 | 2026-04-24 | 自動儲存改放系統下載目錄 |
 | v1.2.0 |  8 | 2026-04-24 | 新增自動儲存（閒置備份） |

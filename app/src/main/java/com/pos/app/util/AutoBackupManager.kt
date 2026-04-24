@@ -68,6 +68,13 @@ class AutoBackupManager @Inject constructor(
     private val _lastBackupAt = MutableStateFlow<Long?>(null)
     val lastBackupAt: StateFlow<Long?> = _lastBackupAt.asStateFlow()
 
+    /**
+     * 每次備份成功都遞增一次；觀察者可用此確保 UI 會重新拉取檔案列表，
+     * 即使 lastBackupAt 的秒級時間戳與前次相同也能收到通知。
+     */
+    private val _backupTick = MutableStateFlow(0)
+    val backupTick: StateFlow<Int> = _backupTick.asStateFlow()
+
     init {
         _lastBackupAt.value = runCatching { listBackups().firstOrNull()?.lastModified }.getOrNull()
 
@@ -133,6 +140,7 @@ class AutoBackupManager @Inject constructor(
                     BackupManager.writeZipToStream(context, os, appDatabase)
                 }
                 _lastBackupAt.value = entry.lastModified
+                _backupTick.value = _backupTick.value + 1
                 storage.cleanup(retentionDays)
                 entry
             }

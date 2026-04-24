@@ -618,6 +618,9 @@ private fun AutoBackupSection(
     var pendingRestoreEntry by remember { mutableStateOf<com.pos.app.util.BackupEntry?>(null) }
     var pendingDeleteEntry by remember { mutableStateOf<com.pos.app.util.BackupEntry?>(null) }
 
+    // 進入畫面時立即拉一次最新狀態（涵蓋背景備份、外部檔案變動等情況）
+    LaunchedEffect(Unit) { viewModel.refreshAutoBackupFiles() }
+
     // SAF 資料夾選擇器
     val pickFolderLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
