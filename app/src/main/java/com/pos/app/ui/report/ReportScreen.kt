@@ -1,21 +1,31 @@
 package com.pos.app.ui.report
 
+import android.content.res.Configuration
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -39,8 +49,32 @@ fun ReportScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val sdf = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
     val dateSdf = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
+    val fileNameSdf = remember { SimpleDateFormat("yyyyMMdd", Locale.getDefault()) }
     var showStartDatePicker by remember { mutableStateOf(false) }
     var showEndDatePicker by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    val exportCsvLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri: android.net.Uri? ->
+        uri?.let { viewModel.exportCsv(context, it) }
+    }
+
+    val suggestedFileName: () -> String = {
+        val now = System.currentTimeMillis()
+        val start = uiState.customStartDate ?: now
+        val end = uiState.customEndDate ?: now
+        val label = when (uiState.dateRange) {
+            DateRange.TODAY -> "today_${fileNameSdf.format(Date(now))}"
+            DateRange.YESTERDAY -> "yesterday_${fileNameSdf.format(Date(now - 86_400_000L))}"
+            DateRange.WEEK -> "week_${fileNameSdf.format(Date(now))}"
+            DateRange.MONTH -> "month_${fileNameSdf.format(Date(now))}"
+            DateRange.YEAR -> "year_${fileNameSdf.format(Date(now))}"
+            DateRange.ALL -> "all_${fileNameSdf.format(Date(now))}"
+            DateRange.CUSTOM -> "${fileNameSdf.format(Date(start))}_${fileNameSdf.format(Date(end))}"
+        }
+        "report_$label.csv"
+    }
 
     if (showStartDatePicker) {
         val startPickerState = rememberDatePickerState(
@@ -196,6 +230,43 @@ fun ReportScreen(
                                 ) {
                                     Text("套用", fontSize = 13.sp)
                                 }
+                                Button(
+                                    onClick = { exportCsvLauncher.launch(suggestedFileName()) },
+                                    enabled = uiState.orders.isNotEmpty(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = t.accent, disabledContainerColor = t.border),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.FileDownload,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("匯出報表", fontSize = 13.sp)
+                                }
+                            }
+                        } else {
+                            // 非自訂模式也提供匯出入口
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                Button(
+                                    onClick = { exportCsvLauncher.launch(suggestedFileName()) },
+                                    enabled = uiState.orders.isNotEmpty(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = t.accent, disabledContainerColor = t.border),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.FileDownload,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("匯出報表", fontSize = 13.sp)
+                                }
                             }
                         }
                     }
@@ -213,29 +284,69 @@ fun ReportScreen(
                 // Item ranking
                 if (uiState.itemRanking.isNotEmpty()) {
                     item {
+                        val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+                        val topItems = uiState.itemRanking.take(10)
                         Column(
                             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(t.card).border(1.dp, t.border, RoundedCornerShape(12.dp)).padding(16.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Text("品項銷售排行", color = t.accent, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                            uiState.itemRanking.take(10).forEachIndexed { idx, (name, qty) ->
-                                val maxQty = uiState.itemRanking.firstOrNull()?.second?.toFloat() ?: 1f
-                                val fraction = qty / maxQty
-                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                            Text("${idx + 1}", color = if (idx == 0) t.accent else t.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(20.dp))
-                                            Text(name, color = t.text, fontSize = 14.sp)
+                            val listContent: @Composable ColumnScope.() -> Unit = {
+                                topItems.forEachIndexed { idx, (name, qty) ->
+                                    val maxQty = topItems.firstOrNull()?.second?.toFloat() ?: 1f
+                                    val fraction = qty / maxQty
+                                    val sliceColor = t.chartBars.getOrElse(idx) { t.accent }
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                Box(
+                                                    modifier = Modifier.size(10.dp).clip(CircleShape).background(sliceColor)
+                                                )
+                                                Text("${idx + 1}", color = sliceColor, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(20.dp))
+                                                Text(name, color = t.text, fontSize = 14.sp)
+                                            }
+                                            Text("$qty 份", color = t.accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                                         }
-                                        Text("$qty 份", color = t.accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                    Box(
-                                        modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(t.border)
-                                    ) {
                                         Box(
-                                            modifier = Modifier.fillMaxWidth(fraction).fillMaxHeight().clip(RoundedCornerShape(2.dp)).background(t.accent)
-                                        )
+                                            modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(t.border)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier.fillMaxWidth(fraction).fillMaxHeight().clip(RoundedCornerShape(2.dp)).background(sliceColor)
+                                            )
+                                        }
                                     }
+                                }
+                            }
+                            val pieValues = topItems.map { it.second.toDouble() }
+                            val pieColors = topItems.indices.map { idx -> t.chartBars.getOrElse(idx) { t.accent } }
+                            if (isLandscape) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                                        content = listContent
+                                    )
+                                    PieChart(
+                                        values = pieValues,
+                                        colors = pieColors,
+                                        modifier = Modifier.size(200.dp)
+                                    )
+                                }
+                            } else {
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp), content = listContent)
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    PieChart(
+                                        values = pieValues,
+                                        colors = pieColors,
+                                        modifier = Modifier.size(200.dp)
+                                    )
                                 }
                             }
                         }
@@ -245,31 +356,70 @@ fun ReportScreen(
                 // Group ranking
                 if (uiState.groupRanking.isNotEmpty()) {
                     item {
+                        val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
                         Column(
                             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(t.card).border(1.dp, t.border, RoundedCornerShape(12.dp)).padding(16.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Text("群組銷售排行", color = t.accent, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                             val maxRevenue = uiState.groupRanking.firstOrNull()?.revenue?.toFloat() ?: 1f
-                            uiState.groupRanking.forEachIndexed { idx, group ->
-                                val fraction = (group.revenue / maxRevenue).toFloat()
-                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                        Column {
-                                            Text(group.groupName, color = t.text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                                            Text("${group.quantity} 份", color = t.textMuted, fontSize = 12.sp)
+                            val listContent: @Composable ColumnScope.() -> Unit = {
+                                uiState.groupRanking.forEachIndexed { idx, group ->
+                                    val fraction = (group.revenue / maxRevenue).toFloat()
+                                    val sliceColor = t.chartBars.getOrElse(idx) { t.accent }
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                Box(
+                                                    modifier = Modifier.size(10.dp).clip(CircleShape).background(sliceColor)
+                                                )
+                                                Column {
+                                                    Text(group.groupName, color = t.text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                                    Text("${group.quantity} 份", color = t.textMuted, fontSize = 12.sp)
+                                                }
+                                            }
+                                            Text("NT${"$"}%.0f".format(group.revenue), color = t.accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                                         }
-                                        Text("NT${"$"}%.0f".format(group.revenue), color = t.accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                    Box(
-                                        modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(t.border)
-                                    ) {
                                         Box(
-                                            modifier = Modifier.fillMaxWidth(fraction).fillMaxHeight().clip(RoundedCornerShape(2.dp)).background(
-                                                t.chartBars.getOrElse(idx) { t.accent }
+                                            modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(t.border)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier.fillMaxWidth(fraction).fillMaxHeight().clip(RoundedCornerShape(2.dp)).background(sliceColor)
                                             )
-                                        )
+                                        }
                                     }
+                                }
+                            }
+                            val pieValues = uiState.groupRanking.map { it.revenue }
+                            val pieColors = uiState.groupRanking.indices.map { idx -> t.chartBars.getOrElse(idx) { t.accent } }
+                            if (isLandscape) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                                        content = listContent
+                                    )
+                                    PieChart(
+                                        values = pieValues,
+                                        colors = pieColors,
+                                        modifier = Modifier.size(200.dp)
+                                    )
+                                }
+                            } else {
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp), content = listContent)
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    PieChart(
+                                        values = pieValues,
+                                        colors = pieColors,
+                                        modifier = Modifier.size(200.dp)
+                                    )
                                 }
                             }
                         }
@@ -407,6 +557,52 @@ private fun OrderSummaryRow(owi: OrderWithItems, sdf: SimpleDateFormat, onDelete
                     Text("NT${"$"}%.0f".format(item.price * item.quantity), fontSize = 13.sp, color = t.accent, fontWeight = FontWeight.SemiBold)
                 }
             }
+        }
+    }
+}
+
+/**
+ * 圓餅圖：依傳入的 values 以對應 colors 繪製扇形，順時針由 12 點鐘方向開始。
+ * values 為 0 或負值時畫成灰色整圓佔位。
+ */
+@Composable
+private fun PieChart(
+    values: List<Double>,
+    colors: List<Color>,
+    modifier: Modifier = Modifier
+) {
+    val total = values.sumOf { if (it > 0) it else 0.0 }
+    Canvas(modifier = modifier) {
+        val diameter = minOf(size.width, size.height)
+        val topLeft = Offset(
+            x = (size.width - diameter) / 2f,
+            y = (size.height - diameter) / 2f
+        )
+        val arcSize = Size(diameter, diameter)
+        if (total <= 0.0) {
+            drawArc(
+                color = Color.Gray.copy(alpha = 0.3f),
+                startAngle = 0f,
+                sweepAngle = 360f,
+                useCenter = true,
+                topLeft = topLeft,
+                size = arcSize
+            )
+            return@Canvas
+        }
+        var startAngle = -90f
+        values.forEachIndexed { idx, v ->
+            if (v <= 0.0) return@forEachIndexed
+            val sweep = (v / total * 360.0).toFloat()
+            drawArc(
+                color = colors.getOrElse(idx) { colors.lastOrNull() ?: Color.Gray },
+                startAngle = startAngle,
+                sweepAngle = sweep,
+                useCenter = true,
+                topLeft = topLeft,
+                size = arcSize
+            )
+            startAngle += sweep
         }
     }
 }

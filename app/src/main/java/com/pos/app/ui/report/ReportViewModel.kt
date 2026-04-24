@@ -1,13 +1,17 @@
 package com.pos.app.ui.report
 
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pos.app.data.db.entity.OrderEntity
 import com.pos.app.data.db.entity.OrderItemEntity
 import com.pos.app.data.repository.OrderRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Calendar
 import javax.inject.Inject
 
@@ -202,4 +206,127 @@ class ReportViewModel @Inject constructor(
     }
 
     fun clearMessage() = _uiState.update { it.copy(message = null) }
+
+    /**
+     * 將目前報表畫面上的資料匯出為 CSV（依畫面版面輸出多區段）：
+     *   1. 總覽（總營業額、總筆數、平均客單）
+     *   2. 品項銷售排行
+     *   3. 群組銷售排行
+     *   4. 訂單明細（每筆訂單展開成多列品項）
+     */
+    fun exportCsv(context: Context, uri: Uri) {
+        viewModelScope.launch {
+            val state = _uiState.value
+            if (state.orders.isEmpty()) {
+                _uiState.update { it.copy(message = "此期間無資料可匯出") }
+                return@launch
+            }
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val content = buildReportCsv(state)
+                    context.contentResolver.openOutputStream(uri)?.use { os ->
+                        // UTF-8 BOM 讓 Excel 開啟中文不亂碼
+                        os.write(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()))
+                        os.write(content.toByteArray(Charsets.UTF_8))
+                    } ?: error("無法開啟輸出串流")
+                }
+            }
+            _uiState.update {
+                it.copy(
+                    message = if (result.isSuccess) "已匯出 ${state.orders.size} 筆訂單" else "匯出失敗：${result.exceptionOrNull()?.message ?: "未知錯誤"}"
+                )
+            }
+        }
+    }
+
+    private fun buildReportCsv(state: ReportUiState): String {
+        val dateTimeFmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+        val dateFmt = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+        val rangeLabel = when (state.dateRange) {
+            DateRange.TODAY -> "今日"
+            DateRange.YESTERDAY -> "昨天"
+            DateRange.WEEK -> "本週"
+            DateRange.MONTH -> "本月"
+            DateRange.YEAR -> "今年"
+            DateRange.ALL -> "全部"
+            DateRange.CUSTOM -> "自訂"
+        }
+        val (start, end) = resolveDateBounds(state.dateRange, state.customStartDate, state.customEndDate)
+        val rangeStr = if (state.dateRange == DateRange.ALL) "全部" else "${dateFmt.format(java.util.Date(start))} ~ ${dateFmt.format(java.util.Date(end))}"
+
+        val sb = StringBuilder()
+        fun line(vararg cols: Any?) {
+            sb.appendLine(cols.joinToString(",") { csvEscape(it?.toString().orEmpty()) })
+        }
+
+        // 檔頭
+        line("報表匯出")
+        line("日期區間", "$rangeLabel（$rangeStr）")
+        line("含已刪除", if (state.showDeleted) "是" else "否")
+        line("產生時間", dateTimeFmt.format(java.util.Date()))
+        sb.appendLine()
+
+        // 1. 總覽
+        line("===== 總覽 =====")
+        line("項目", "數值")
+        line("總營業額", "NT\$%.0f".format(state.totalRevenue))
+        line("總筆數", "${state.totalOrders} 筆")
+        line("平均客單", "NT\$%.0f".format(state.avgOrderValue))
+        sb.appendLine()
+
+        // 2. 品項銷售排行
+        line("===== 品項銷售排行 =====")
+        line("排名", "品項", "數量")
+        state.itemRanking.forEachIndexed { idx, (name, qty) ->
+            line(idx + 1, name, qty)
+        }
+        if (state.itemRanking.isEmpty()) line("（無資料）")
+        sb.appendLine()
+
+        // 3. 群組銷售排行
+        line("===== 群組銷售排行 =====")
+        line("排名", "群組", "數量", "營業額")
+        state.groupRanking.forEachIndexed { idx, g ->
+            line(idx + 1, g.groupName, g.quantity, "NT\$%.0f".format(g.revenue))
+        }
+        if (state.groupRanking.isEmpty()) line("（無資料）")
+        sb.appendLine()
+
+        // 4. 訂單明細
+        line("===== 訂單明細 =====")
+        line("訂單ID", "桌號", "建立時間", "狀態", "已刪除", "品項", "群組", "數量", "單價", "小計")
+        state.orders.forEach { owi ->
+            val o = owi.order
+            val createdStr = dateTimeFmt.format(java.util.Date(o.createdAt))
+            val deletedFlag = if (o.isDeleted) "是" else ""
+            if (owi.items.isEmpty()) {
+                line(o.id, o.tableName, createdStr, o.status, deletedFlag, "", "", "", "", "")
+            } else {
+                owi.items.forEach { item ->
+                    line(
+                        o.id,
+                        o.tableName,
+                        createdStr,
+                        o.status,
+                        deletedFlag,
+                        item.name,
+                        item.menuGroupName,
+                        item.quantity,
+                        "%.0f".format(item.price),
+                        "%.0f".format(item.price * item.quantity)
+                    )
+                }
+            }
+        }
+
+        return sb.toString()
+    }
+
+    /** CSV 欄位跳脫：含逗號 / 引號 / 換行時用雙引號包起來，內部引號加倍。 */
+    private fun csvEscape(s: String): String {
+        if (s.isEmpty()) return ""
+        val needQuote = s.contains(',') || s.contains('"') || s.contains('\n') || s.contains('\r')
+        val escaped = s.replace("\"", "\"\"")
+        return if (needQuote) "\"$escaped\"" else escaped
+    }
 }
