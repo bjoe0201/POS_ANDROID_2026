@@ -1,0 +1,84 @@
+# ---------- Android / Gradle ----------
+*.apk
+*.aar
+*.ap_
+*.aab
+*.dex
+*.class
+
+# Generated / build output
+bin/
+gen/
+out/
+release/
+/build
+**/build/
+/captures
+.externalNativeBuild
+.cxx
+obj/
+
+# Gradle
+.gradle
+.gradle/
+*.iml
+
+# ---------- IDE ----------
+.idea/
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+*.ipr
+*.iws
+.vscode/
+
+# ---------- 本機設定（不應公開） ----------
+local.properties
+/local.properties
+
+# ---------- 簽章 / Keystore（嚴禁提交） ----------
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+*.p12
+*.pfx
+
+# ---------- 環境變數 / 秘密金鑰 ----------
+.env
+.env.*
+secrets.properties
+google-services.json
+agconnect-services.json
+firebase-app-distribution.json
+
+# ---------- Log / 暫存 ----------
+*.log
+*.hprof
+*.bak
+*.tmp
+*.swp
+*.trace
+/profile
+
+# ---------- 本地備份 / 匯出資料 ----------
+*.zip
+/backups/
+/exports/
+
+# ---------- Kotlin ----------
+.kotlin/
+
+# ---------- OS ----------
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ---------- AI / 開發工具本地設定 ----------
+.claude/
+.cursor/
+.aider*

@@ -1,0 +1,2 @@
+-keep class com.pos.app.data.** { *; }
+-keepattributes *Annotation*

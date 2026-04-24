@@ -1,0 +1,35 @@
+package com.pos.app.ui.theme
+
+import androidx.compose.ui.graphics.Color
+
+// Legacy compat
+val Red700 = Color(0xFFC62828)
+val Red500 = Color(0xFFE53935)
+val Red100 = Color(0xFFFFCDD2)
+val Orange700 = Color(0xFFE65100)
+val Orange500 = Color(0xFFFF6D00)
+val Amber50  = Color(0xFFFFF8E1)
+val Green700 = Color(0xFF2E7D32)
+val Green100 = Color(0xFFC8E6C9)
+val Grey900  = Color(0xFF212121)
+val Grey200  = Color(0xFFEEEEEE)
+
+// Dark POS theme palette (深夜煉獄 — dark-red)
+val PosBackground  = Color(0xFF0D0D16)
+val PosSurface     = Color(0xFF16162A)
+val PosCard        = Color(0xFF1E1E35)
+val PosCardHover   = Color(0xFF252542)
+val PosBorder      = Color(0xFF2A2A48)
+val PosTopbar      = Color(0xFF0A0A12)
+val PosAccent      = Color(0xFFC62828)
+val PosAccentHov   = Color(0xFFEF5350)
+val PosAccentDim   = Color(0x26C62828)
+val PosAccentDim2  = Color(0x40C62828)
+val PosText        = Color(0xFFF0F0FA)
+val PosTextSub     = Color(0xFF9090B8)
+val PosTextMuted   = Color(0xFF555580)
+val PosOccupied    = Color(0xFF2E7D32)
+val PosOccupiedBg  = Color(0x262E7D32)
+val PosSuccess     = Color(0xFF43A047)
+val PosWarning     = Color(0xFFF9A825)
+val PosError       = Color(0xFFE53935)
