@@ -993,7 +993,7 @@ private val MANUAL_HTML = """
 <body>
 
 <h1>🍲 火鍋店 POS 使用說明</h1>
-<p>版本 v1.1.4 &nbsp;·&nbsp; 2026-04-22</p>
+<p>版本 v1.2.2 &nbsp;·&nbsp; 2026-04-24</p>
 
 <hr>
 
@@ -1013,11 +1013,14 @@ private val MANUAL_HTML = """
   <li>畫面上方橫列選擇桌號。</li>
   <li>中段分類 Tab 篩選菜單群組（鍋底 / 肉類 / 海鮮…）。</li>
   <li>點擊品項按鈕加入訂單，再次點擊可遞增數量。</li>
-  <li>右側訂單摘要確認後，點擊「結帳」完成收款。</li>
+  <li>右側訂單摘要確認後，點擊「結帳」→「✓ 確認收款」完成收款。</li>
+  <li>DB 儲存完成後會播放歡快的完成音效（跟隨系統通知音量）。</li>
 </ol>
 <h3>補登功能</h3>
 <p>點擊日期可切換至歷史日期補登訂單。</p>
 <div class="tip">💡 3 分鐘無操作，自動切回當天日期。</div>
+<h3>崩潰保護</h3>
+<div class="tip">🛡️ 每加一道菜或結帳都即時寫入 DB 主檔（TRUNCATE journal + synchronous=FULL），即使系統當機或斷電，已記帳的資料不會遺失。</div>
 <h3>注意事項</h3>
 <ul>
   <li>同一桌號可同時存在多筆「開啟中」訂單。</li>
@@ -1132,9 +1135,29 @@ private val MANUAL_HTML = """
   <li><strong>備份匯入</strong>：選取 .zip 備份檔還原資料庫，還原完成後 App 自動關閉，重開後生效。</li>
 </ul>
 <div class="warn">⚠️ 備份匯入會<strong>完整覆蓋</strong>現有資料庫，操作前請先執行備份匯出。</div>
+
+<h3>自動儲存（閒置備份）</h3>
+<table>
+  <tr><th>項目</th><th>預設</th><th>可調範圍</th></tr>
+  <tr><td>啟用自動儲存</td><td>開</td><td>開 / 關</td></tr>
+  <tr><td>閒置觸發時間</td><td>5 分鐘</td><td>1 / 3 / 5 / 10 / 15 / 30 / 60 分鐘</td></tr>
+  <tr><td>保留天數</td><td>3 天</td><td>1 / 3 / 5 / 7 / 14 / 30 天</td></tr>
+  <tr><td>備份資料夾</td><td>系統「下載／火鍋店POS備份」</td><td>可經「選擇其他資料夾」指定任何位置</td></tr>
+</table>
+<ul>
+  <li>檔名：<code>pos_auto_YYYYMMDD.zip</code>，每天 1 份，同日觸發會覆寫。</li>
+  <li>使用者觸控 / 按鍵都會重置閒置計時器；切入背景時會立即執行一次備份。</li>
+  <li>備份列表可直接「還原」或「刪除」。</li>
+  <li><strong>預設存放在公用下載目錄，App 解除安裝後備份檔仍會保留</strong>，可用來重新安裝後還原。</li>
+</ul>
+<div class="tip">💡 建議保留預設位置以確保資料安全；若想放到雲端同步資料夾（OneDrive / Google Drive），請選該資料夾為備份位置。</div>
+
+<h3>收款完成音效</h3>
+<p>按「✓ 確認收款」並寫入 DB 後自動播放歡快上行琶音（C5-E5-G5-C6），音量跟隨系統「通知」音量。</p>
+
 <h3>資料庫初始化</h3>
 <p>清除所有訂單、菜單與桌號，恢復系統預設資料（需兩步驟確認）。</p>
-<div class="warn">⚠️ 初始化操作<strong>無法復原</strong>，請務必先執行備份匯出。</div>
+<div class="warn">⚠️ 初始化操作<strong>無法復原</strong>，請務必先執行備份匯出或確認自動備份已存在。</div>
 
 <hr>
 
@@ -1146,10 +1169,12 @@ private val MANUAL_HTML = """
   <tr><td>桌號不見了</td><td>至桌號設定確認桌號是否已停用或刪除</td></tr>
   <tr><td>報表數字不對</td><td>確認篩選範圍與「已刪除」勾選狀態</td></tr>
   <tr><td>備份匯入後資料不見</td><td>備份會覆蓋所有資料，請確認備份檔是否正確</td></tr>
+  <tr><td>當機後當天資料不見</td><td>v1.2.2 起已採用 crash-safe DB + 自動儲存，建議保持自動儲存開啟，並可至「下載／火鍋店POS備份」找回當日備份</td></tr>
+  <tr><td>找不到自動備份檔</td><td>手機檔案管理員開啟「內部儲存 → Download → 火鍋店POS備份」</td></tr>
 </table>
 
 <hr>
-<p style="text-align:center; color:#555; font-size:12px; padding: 8px 0 16px;">🍲 火鍋店 POS v1.1.4 &nbsp;·&nbsp; Android 10+</p>
+<p style="text-align:center; color:#555; font-size:12px; padding: 8px 0 16px;">🍲 火鍋店 POS v1.2.2 &nbsp;·&nbsp; Android 10+</p>
 
 </body>
 </html>
