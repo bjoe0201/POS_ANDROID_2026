@@ -220,6 +220,7 @@ App 首次安裝時自動建立：
 
 ## 專案文件
 
+- **更新紀錄：** [`CHANGELOG.md`](CHANGELOG.md)（各版本變更歷程）
 - **功能規格：** [`PLANS/plan-hotPotPosApp.prompt.md`](PLANS/plan-hotPotPosApp.prompt.md)
 - **開發指引：** [`CLAUDE.md`](CLAUDE.md)
 
