@@ -29,6 +29,10 @@ class SettingsDataStore(private val context: Context) {
         private val BREAK_END       = stringPreferencesKey("break_end")
         private val DEFAULT_DURATION = intPreferencesKey("default_duration")
         private val CALENDAR_CHIPS_PER_ROW = intPreferencesKey("calendar_chips_per_row")
+        private val AUTO_BACKUP_ENABLED = booleanPreferencesKey("auto_backup_enabled")
+        private val AUTO_BACKUP_IDLE_MINUTES = intPreferencesKey("auto_backup_idle_minutes")
+        private val AUTO_BACKUP_RETENTION_DAYS = intPreferencesKey("auto_backup_retention_days")
+        private val AUTO_BACKUP_EXTERNAL_TREE_URI = stringPreferencesKey("auto_backup_external_tree_uri")
         private const val DEFAULT_PIN = "1234"
 
         fun hashPin(pin: String): String {
@@ -97,6 +101,18 @@ class SettingsDataStore(private val context: Context) {
     suspend fun setBreakEnd(v: String)   { context.dataStore.edit { it[BREAK_END]   = v } }
     suspend fun setDefaultDuration(v: Int) { context.dataStore.edit { it[DEFAULT_DURATION] = v } }
     suspend fun setCalendarChipsPerRow(v: Int) { context.dataStore.edit { it[CALENDAR_CHIPS_PER_ROW] = v } }
+
+    // ── 自動儲存（閒置備份）──
+    val autoBackupEnabled: Flow<Boolean> = context.dataStore.data.map { it[AUTO_BACKUP_ENABLED] ?: true }
+    val autoBackupIdleMinutes: Flow<Int> = context.dataStore.data.map { it[AUTO_BACKUP_IDLE_MINUTES] ?: 5 }
+    val autoBackupRetentionDays: Flow<Int> = context.dataStore.data.map { it[AUTO_BACKUP_RETENTION_DAYS] ?: 3 }
+    /** 使用者指定的外部備份資料夾（SAF Tree URI），為空代表使用預設「下載／火鍋店POS備份」。 */
+    val autoBackupExternalTreeUri: Flow<String> = context.dataStore.data.map { it[AUTO_BACKUP_EXTERNAL_TREE_URI] ?: "" }
+
+    suspend fun setAutoBackupEnabled(v: Boolean) { context.dataStore.edit { it[AUTO_BACKUP_ENABLED] = v } }
+    suspend fun setAutoBackupIdleMinutes(v: Int) { context.dataStore.edit { it[AUTO_BACKUP_IDLE_MINUTES] = v } }
+    suspend fun setAutoBackupRetentionDays(v: Int) { context.dataStore.edit { it[AUTO_BACKUP_RETENTION_DAYS] = v } }
+    suspend fun setAutoBackupExternalTreeUri(v: String) { context.dataStore.edit { it[AUTO_BACKUP_EXTERNAL_TREE_URI] = v } }
 
     fun verifyPin(inputPin: String, storedHash: String): Boolean = hashPin(inputPin) == storedHash
 }

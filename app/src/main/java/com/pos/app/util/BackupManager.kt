@@ -104,36 +104,81 @@ object BackupManager {
      */
     fun importZip(context: Context, uri: Uri, db: AppDatabase): Result<Unit> {
         return runCatching {
-            val dbDir = context.getDatabasePath(DB_NAME).parentFile
-                ?: error("Cannot locate database directory")
-
-            // Step 1: 先解壓到 temp 目錄，確認 zip 完整且包含 DB 主檔
-            val tempDir = File(context.cacheDir, "db_restore_tmp").apply {
-                deleteRecursively(); mkdirs()
-            }
-            context.contentResolver.openInputStream(uri)?.use { input ->
-                ZipInputStream(input.buffered()).use { zip ->
-                    var entry = zip.nextEntry
-                    while (entry != null) {
-                        File(tempDir, entry.name).outputStream().use { zip.copyTo(it) }
-                        zip.closeEntry()
-                        entry = zip.nextEntry
-                    }
-                }
-            } ?: error("Cannot open input stream")
-
-            val tempDb = File(tempDir, DB_NAME)
-            if (!tempDb.exists() || tempDb.length() == 0L) error("備份 ZIP 中找不到有效的資料庫檔案")
-
-            // Step 2: WAL checkpoint 後關閉 Room，避免 Room 在覆蓋期間持有檔案鎖
-            runCatching { db.openHelper.writableDatabase.query("PRAGMA wal_checkpoint(FULL)").close() }
-            db.close()
-
-            // Step 3: 將 temp 裡的檔案覆蓋到正式 DB 目錄
-            tempDir.listFiles()?.forEach { src ->
-                src.copyTo(File(dbDir, src.name), overwrite = true)
-            }
-            tempDir.deleteRecursively()
+            val input = context.contentResolver.openInputStream(uri) ?: error("Cannot open input stream")
+            input.use { restoreFromStream(context, it, db) }
         }
+    }
+
+    /**
+     * 將 DB（含 -wal / -shm）直接寫入指定檔案，供「自動儲存」寫到 App 私有目錄。
+     */
+    fun exportZipToFile(context: Context, outFile: File, db: AppDatabase): Result<Unit> {
+        return runCatching {
+            outFile.parentFile?.mkdirs()
+            outFile.outputStream().use { writeZipToStream(context, it, db) }
+        }
+    }
+
+    /**
+     * 將 DB 打包為 ZIP 並寫到任意 OutputStream（供 MediaStore / DocumentFile 使用）。
+     * 呼叫端負責關閉 stream。
+     */
+    fun writeZipToStream(context: Context, out: java.io.OutputStream, db: AppDatabase) {
+        db.openHelper.writableDatabase.query("PRAGMA wal_checkpoint(FULL)").close()
+        val dbDir = context.getDatabasePath(DB_NAME).parentFile
+            ?: error("Cannot locate database directory")
+        val filesToZip = listOf(
+            File(dbDir, DB_NAME),
+            File(dbDir, "$DB_NAME-shm"),
+            File(dbDir, "$DB_NAME-wal")
+        ).filter { it.exists() }
+
+        ZipOutputStream(out.buffered()).use { zip ->
+            filesToZip.forEach { file ->
+                zip.putNextEntry(ZipEntry(file.name))
+                file.inputStream().use { it.copyTo(zip) }
+                zip.closeEntry()
+            }
+        }
+    }
+
+    /**
+     * 從本機檔案還原（供自動儲存列表使用）。呼叫方負責在成功後 kill process。
+     */
+    fun importZipFromFile(context: Context, file: File, db: AppDatabase): Result<Unit> {
+        return runCatching {
+            file.inputStream().use { restoreFromStream(context, it, db) }
+        }
+    }
+
+    private fun restoreFromStream(context: Context, input: java.io.InputStream, db: AppDatabase) {
+        val dbDir = context.getDatabasePath(DB_NAME).parentFile
+            ?: error("Cannot locate database directory")
+
+        // Step 1: 先解壓到 temp 目錄，確認 zip 完整且包含 DB 主檔
+        val tempDir = File(context.cacheDir, "db_restore_tmp").apply {
+            deleteRecursively(); mkdirs()
+        }
+        ZipInputStream(input.buffered()).use { zip ->
+            var entry = zip.nextEntry
+            while (entry != null) {
+                File(tempDir, entry.name).outputStream().use { zip.copyTo(it) }
+                zip.closeEntry()
+                entry = zip.nextEntry
+            }
+        }
+
+        val tempDb = File(tempDir, DB_NAME)
+        if (!tempDb.exists() || tempDb.length() == 0L) error("備份 ZIP 中找不到有效的資料庫檔案")
+
+        // Step 2: WAL checkpoint 後關閉 Room，避免 Room 在覆蓋期間持有檔案鎖
+        runCatching { db.openHelper.writableDatabase.query("PRAGMA wal_checkpoint(FULL)").close() }
+        db.close()
+
+        // Step 3: 將 temp 裡的檔案覆蓋到正式 DB 目錄
+        tempDir.listFiles()?.forEach { src ->
+            src.copyTo(File(dbDir, src.name), overwrite = true)
+        }
+        tempDir.deleteRecursively()
     }
 }

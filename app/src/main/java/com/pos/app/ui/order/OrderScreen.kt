@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.pos.app.data.db.entity.MenuItemEntity
+import com.pos.app.util.SoundEffects
 import com.pos.app.data.db.entity.OrderItemEntity
 import com.pos.app.data.db.entity.TableEntity
 import com.pos.app.ui.theme.LocalPosColors
@@ -92,6 +93,8 @@ fun OrderScreen(
                 viewModel.payOrder {
                     showCheckout = false
                     lastCheckout = tName?.let { n -> n to tTotal }
+                    // DB 寫入完成後發出完成音效
+                    SoundEffects.playPaymentSuccess()
                 }
             },
             onDismiss = { showCheckout = false },

@@ -19,6 +19,10 @@ class SettingsRepository @Inject constructor(private val dataStore: SettingsData
     val breakEnd: Flow<String>     = dataStore.breakEnd
     val defaultDuration: Flow<Int> = dataStore.defaultDuration
     val calendarChipsPerRow: Flow<Int> = dataStore.calendarChipsPerRow
+    val autoBackupEnabled: Flow<Boolean> = dataStore.autoBackupEnabled
+    val autoBackupIdleMinutes: Flow<Int> = dataStore.autoBackupIdleMinutes
+    val autoBackupRetentionDays: Flow<Int> = dataStore.autoBackupRetentionDays
+    val autoBackupExternalTreeUri: Flow<String> = dataStore.autoBackupExternalTreeUri
 
     suspend fun setPin(newPin: String) = dataStore.setPin(newPin)
     fun verifyPin(input: String, hash: String) = dataStore.verifyPin(input, hash)
@@ -32,4 +36,8 @@ class SettingsRepository @Inject constructor(private val dataStore: SettingsData
     suspend fun setBreakEnd(v: String)     = dataStore.setBreakEnd(v)
     suspend fun setDefaultDuration(v: Int) = dataStore.setDefaultDuration(v)
     suspend fun setCalendarChipsPerRow(v: Int) = dataStore.setCalendarChipsPerRow(v)
+    suspend fun setAutoBackupEnabled(v: Boolean) = dataStore.setAutoBackupEnabled(v)
+    suspend fun setAutoBackupIdleMinutes(v: Int) = dataStore.setAutoBackupIdleMinutes(v)
+    suspend fun setAutoBackupRetentionDays(v: Int) = dataStore.setAutoBackupRetentionDays(v)
+    suspend fun setAutoBackupExternalTreeUri(v: String) = dataStore.setAutoBackupExternalTreeUri(v)
 }

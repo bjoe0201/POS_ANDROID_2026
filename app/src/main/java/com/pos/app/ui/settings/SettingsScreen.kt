@@ -280,6 +280,13 @@ fun SettingsScreen(
                     }
                 }
 
+                // Auto backup section
+                AutoBackupSection(
+                    viewModel = viewModel,
+                    uiState = uiState,
+                    t = t
+                )
+
                 // DB reset section
                 SectionCard(title = "資料庫管理", t = t) {
                     Box(
@@ -597,6 +604,257 @@ private fun PinTextField(
         ),
         textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace, letterSpacing = 4.sp)
     )
+}
+
+@Composable
+private fun AutoBackupSection(
+    viewModel: SettingsViewModel,
+    uiState: SettingsUiState,
+    t: PosColors
+) {
+    val context = LocalContext.current
+    var showIdleMenu by remember { mutableStateOf(false) }
+    var showRetentionMenu by remember { mutableStateOf(false) }
+    var pendingRestoreEntry by remember { mutableStateOf<com.pos.app.util.BackupEntry?>(null) }
+    var pendingDeleteEntry by remember { mutableStateOf<com.pos.app.util.BackupEntry?>(null) }
+
+    // SAF 資料夾選擇器
+    val pickFolderLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }
+            viewModel.setAutoBackupExternalTreeUri(uri.toString())
+        }
+    }
+
+    val lastText = remember(uiState.autoBackupLastAt) {
+        uiState.autoBackupLastAt?.let {
+            SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(it))
+        } ?: "尚無備份"
+    }
+
+    if (pendingRestoreEntry != null) {
+        AlertDialog(
+            onDismissRequest = { pendingRestoreEntry = null },
+            containerColor = t.surface,
+            title = { Text("還原自動備份", color = t.text, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "將使用「${pendingRestoreEntry!!.name}」覆蓋目前資料，還原後 App 會自動關閉，重新開啟後生效。確定繼續？",
+                    color = t.textSub
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val e = pendingRestoreEntry!!
+                        pendingRestoreEntry = null
+                        viewModel.restoreFromAutoBackup(context, e)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = t.accent)
+                ) { Text("確定還原") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRestoreEntry = null }) { Text("取消", color = t.textSub) }
+            }
+        )
+    }
+
+    if (pendingDeleteEntry != null) {
+        AlertDialog(
+            onDismissRequest = { pendingDeleteEntry = null },
+            containerColor = t.surface,
+            title = { Text("刪除備份", color = t.text, fontWeight = FontWeight.Bold) },
+            text = { Text("確定刪除「${pendingDeleteEntry!!.name}」？此操作無法復原。", color = t.textSub) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val e = pendingDeleteEntry!!
+                        pendingDeleteEntry = null
+                        viewModel.deleteAutoBackup(e)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = t.error)
+                ) { Text("刪除") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteEntry = null }) { Text("取消", color = t.textSub) }
+            }
+        )
+    }
+
+    SectionCard(title = "自動儲存", t = t) {
+        Text(
+            "閒置指定時間後自動備份到「下載／火鍋店POS備份」；也可指定其他資料夾。App 解除安裝後備份檔仍會保留。",
+            color = t.textMuted, fontSize = 13.sp
+        )
+        Spacer(Modifier.height(8.dp))
+
+        // Enable toggle
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("啟用自動儲存", color = t.text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Switch(
+                checked = uiState.autoBackupEnabled,
+                onCheckedChange = { viewModel.setAutoBackupEnabled(it) },
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = t.accent,
+                    checkedTrackColor = t.accentDim2,
+                    uncheckedThumbColor = t.textMuted,
+                    uncheckedTrackColor = t.border
+                )
+            )
+        }
+
+        // Idle minutes
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("閒置觸發時間", color = t.text, fontSize = 14.sp)
+            Box {
+                OutlinedButton(
+                    onClick = { showIdleMenu = true },
+                    enabled = uiState.autoBackupEnabled,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, t.border),
+                    shape = RoundedCornerShape(8.dp)
+                ) { Text("${uiState.autoBackupIdleMinutes} 分鐘", color = t.accent, fontSize = 13.sp) }
+                DropdownMenu(expanded = showIdleMenu, onDismissRequest = { showIdleMenu = false }, containerColor = t.surface) {
+                    listOf(1, 3, 5, 10, 15, 30, 60).forEach { m ->
+                        DropdownMenuItem(
+                            text = { Text("$m 分鐘", color = if (uiState.autoBackupIdleMinutes == m) t.accent else t.text) },
+                            onClick = { viewModel.setAutoBackupIdleMinutes(m); showIdleMenu = false }
+                        )
+                    }
+                }
+            }
+        }
+
+        // Retention days
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("保留天數", color = t.text, fontSize = 14.sp)
+            Box {
+                OutlinedButton(
+                    onClick = { showRetentionMenu = true },
+                    enabled = uiState.autoBackupEnabled,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, t.border),
+                    shape = RoundedCornerShape(8.dp)
+                ) { Text("${uiState.autoBackupRetentionDays} 天", color = t.accent, fontSize = 13.sp) }
+                DropdownMenu(expanded = showRetentionMenu, onDismissRequest = { showRetentionMenu = false }, containerColor = t.surface) {
+                    listOf(1, 3, 5, 7, 14, 30).forEach { d ->
+                        DropdownMenuItem(
+                            text = { Text("$d 天", color = if (uiState.autoBackupRetentionDays == d) t.accent else t.text) },
+                            onClick = { viewModel.setAutoBackupRetentionDays(d); showRetentionMenu = false }
+                        )
+                    }
+                }
+            }
+        }
+
+        // Storage folder
+        Spacer(Modifier.height(8.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(t.surface)
+                .border(1.dp, t.border, RoundedCornerShape(8.dp))
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text("備份資料夾", color = t.textMuted, fontSize = 12.sp)
+            Text(
+                uiState.autoBackupStorageDesc,
+                color = t.text,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium
+            )
+            if (!uiState.autoBackupUsingCustom) {
+                Text("（預設：系統「下載 / 火鍋店POS備份」）", color = t.textMuted, fontSize = 11.sp)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = { pickFolderLauncher.launch(null) },
+                    border = androidx.compose.foundation.BorderStroke(1.dp, t.accent),
+                    shape = RoundedCornerShape(8.dp)
+                ) { Text("選擇其他資料夾", color = t.accent, fontSize = 12.sp) }
+                if (uiState.autoBackupUsingCustom) {
+                    OutlinedButton(
+                        onClick = { viewModel.clearAutoBackupExternalTreeUri() },
+                        border = androidx.compose.foundation.BorderStroke(1.dp, t.border),
+                        shape = RoundedCornerShape(8.dp)
+                    ) { Text("改回預設", color = t.textSub, fontSize = 12.sp) }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text("最近自動備份", color = t.textMuted, fontSize = 12.sp)
+                Text(lastText, color = t.text, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            }
+            Button(
+                onClick = { viewModel.backupNow() },
+                colors = ButtonDefaults.buttonColors(containerColor = t.accent),
+                shape = RoundedCornerShape(8.dp)
+            ) { Text("立即備份", fontSize = 13.sp) }
+        }
+
+        if (uiState.autoBackupFiles.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            Box(modifier = Modifier.height(1.dp).fillMaxWidth().background(t.border))
+            Spacer(Modifier.height(8.dp))
+            Text("備份列表（${uiState.autoBackupFiles.size} 個）", color = t.textMuted, fontSize = 12.sp)
+            Spacer(Modifier.height(6.dp))
+            val sdf = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
+            uiState.autoBackupFiles.forEach { info ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(t.surface)
+                        .border(1.dp, t.border, RoundedCornerShape(8.dp))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(info.name, color = t.text, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Text(
+                            "${sdf.format(Date(info.lastModified))}  ·  ${"%.1f".format(info.size / 1024.0)} KB",
+                            color = t.textMuted, fontSize = 11.sp
+                        )
+                    }
+                    TextButton(onClick = { pendingRestoreEntry = info }) {
+                        Text("還原", color = t.accent, fontSize = 13.sp)
+                    }
+                    TextButton(onClick = { pendingDeleteEntry = info }) {
+                        Text("刪除", color = t.error, fontSize = 13.sp)
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+            }
+        }
+    }
 }
 
 // ── 使用說明 Dialog ────────────────────────────────────────────────────────────

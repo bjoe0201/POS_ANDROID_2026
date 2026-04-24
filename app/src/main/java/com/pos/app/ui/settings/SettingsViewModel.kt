@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.room.withTransaction
 import com.pos.app.data.db.AppDatabase
 import com.pos.app.data.repository.SettingsRepository
+import com.pos.app.util.AutoBackupManager
+import com.pos.app.util.BackupEntry
 import com.pos.app.util.BackupManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -26,13 +28,21 @@ data class SettingsUiState(
     val breakEnd: String = "",
     val defaultDuration: Int = 90,
     val calendarChipsPerRow: Int = 2,
+    val autoBackupEnabled: Boolean = true,
+    val autoBackupIdleMinutes: Int = 5,
+    val autoBackupRetentionDays: Int = 3,
+    val autoBackupLastAt: Long? = null,
+    val autoBackupFiles: List<BackupEntry> = emptyList(),
+    val autoBackupStorageDesc: String = "下載／火鍋店POS備份",
+    val autoBackupUsingCustom: Boolean = false,
     val message: String? = null
 )
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
-    private val appDatabase: AppDatabase
+    private val appDatabase: AppDatabase,
+    private val autoBackupManager: AutoBackupManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -75,6 +85,97 @@ class SettingsViewModel @Inject constructor(
         settingsRepository.calendarChipsPerRow
             .onEach { v -> _uiState.update { it.copy(calendarChipsPerRow = v) } }
             .launchIn(viewModelScope)
+        settingsRepository.autoBackupEnabled
+            .onEach { v -> _uiState.update { it.copy(autoBackupEnabled = v) } }
+            .launchIn(viewModelScope)
+        settingsRepository.autoBackupIdleMinutes
+            .onEach { v -> _uiState.update { it.copy(autoBackupIdleMinutes = v) } }
+            .launchIn(viewModelScope)
+        settingsRepository.autoBackupRetentionDays
+            .onEach { v -> _uiState.update { it.copy(autoBackupRetentionDays = v) } }
+            .launchIn(viewModelScope)
+        settingsRepository.autoBackupExternalTreeUri
+            .onEach { uri ->
+                _uiState.update {
+                    it.copy(
+                        autoBackupUsingCustom = uri.isNotBlank(),
+                        autoBackupStorageDesc = autoBackupManager.storageDescription(),
+                        autoBackupFiles = loadAutoBackupFiles()
+                    )
+                }
+            }
+            .launchIn(viewModelScope)
+        autoBackupManager.lastBackupAt
+            .onEach { t -> _uiState.update { it.copy(autoBackupLastAt = t, autoBackupFiles = loadAutoBackupFiles()) } }
+            .launchIn(viewModelScope)
+    }
+
+    private fun loadAutoBackupFiles(): List<BackupEntry> = autoBackupManager.listBackups()
+
+    fun refreshAutoBackupFiles() {
+        _uiState.update {
+            it.copy(
+                autoBackupFiles = loadAutoBackupFiles(),
+                autoBackupStorageDesc = autoBackupManager.storageDescription()
+            )
+        }
+    }
+
+    fun setAutoBackupEnabled(v: Boolean) {
+        viewModelScope.launch { settingsRepository.setAutoBackupEnabled(v) }
+    }
+
+    fun setAutoBackupIdleMinutes(v: Int) {
+        viewModelScope.launch { settingsRepository.setAutoBackupIdleMinutes(v.coerceAtLeast(1)) }
+    }
+
+    fun setAutoBackupRetentionDays(v: Int) {
+        viewModelScope.launch { settingsRepository.setAutoBackupRetentionDays(v.coerceAtLeast(1)) }
+    }
+
+    /** 使用者透過 SAF 選到新的資料夾 URI，需已呼叫 takePersistableUriPermission。 */
+    fun setAutoBackupExternalTreeUri(uri: String) {
+        viewModelScope.launch {
+            settingsRepository.setAutoBackupExternalTreeUri(uri)
+            _uiState.update { it.copy(message = "已切換備份資料夾") }
+        }
+    }
+
+    fun clearAutoBackupExternalTreeUri() {
+        viewModelScope.launch {
+            settingsRepository.setAutoBackupExternalTreeUri("")
+            _uiState.update { it.copy(message = "已改回預設下載目錄") }
+        }
+    }
+
+    fun backupNow() {
+        viewModelScope.launch(Dispatchers.IO) {
+            autoBackupManager.backupNow()
+                .onSuccess { entry ->
+                    _uiState.update {
+                        it.copy(
+                            message = "已建立備份：${entry.name}",
+                            autoBackupFiles = loadAutoBackupFiles()
+                        )
+                    }
+                }
+                .onFailure { e -> _uiState.update { it.copy(message = "自動備份失敗：${e.message}") } }
+        }
+    }
+
+    fun restoreFromAutoBackup(context: Context, entry: BackupEntry) {
+        viewModelScope.launch(Dispatchers.IO) {
+            BackupManager.importZip(context, entry.uri, appDatabase)
+                .onSuccess { android.os.Process.killProcess(android.os.Process.myPid()) }
+                .onFailure { e -> _uiState.update { it.copy(message = "還原失敗：${e.message}") } }
+        }
+    }
+
+    fun deleteAutoBackup(entry: BackupEntry) {
+        viewModelScope.launch(Dispatchers.IO) {
+            autoBackupManager.deleteBackup(entry)
+            _uiState.update { it.copy(autoBackupFiles = loadAutoBackupFiles()) }
+        }
     }
 
     fun setTabMenuEnabled(enabled: Boolean) {

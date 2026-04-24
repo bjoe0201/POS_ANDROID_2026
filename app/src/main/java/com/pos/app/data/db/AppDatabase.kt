@@ -129,6 +129,9 @@ abstract class AppDatabase : RoomDatabase() {
                     "pos_database"
                 )
                     .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    // 將 journal 模式改為 TRUNCATE，確保每筆交易直接 fsync 到主 DB 檔，
+                    // 避免系統崩潰 / 斷電時 WAL 尚未合併造成資料遺失（POS 寫入量不高，效能可接受）。
+                    .setJournalMode(JournalMode.TRUNCATE)
                     .addCallback(object : Callback() {
                         override fun onCreate(db: SupportSQLiteDatabase) {
                             super.onCreate(db)
@@ -137,6 +140,14 @@ abstract class AppDatabase : RoomDatabase() {
                                     seedDefaults(database)
                                 }
                             }
+                        }
+
+                        override fun onOpen(db: SupportSQLiteDatabase) {
+                            super.onOpen(db)
+                            // synchronous=FULL：每次 commit 都 fsync，最保險，避免斷電遺失交易
+                            runCatching { db.query("PRAGMA synchronous=FULL").close() }
+                            // 若先前版本遺留的 WAL 檔存在，checkpoint 並合併回主 DB
+                            runCatching { db.query("PRAGMA wal_checkpoint(TRUNCATE)").close() }
                         }
                     })
                     .build()
