@@ -13,7 +13,9 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Settings
@@ -597,7 +599,7 @@ private fun CheckoutDialog(tableName: String, orderItems: List<OrderItemEntity>,
                     }
                     Text("共 ${orderItems.size} 個品項 $quantityCount 件", color = t.textMuted, fontSize = 13.sp)
                 }
-                Column(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(12.dp)).padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Column(modifier = Modifier.heightIn(max = 180.dp).verticalScroll(rememberScrollState()).clip(RoundedCornerShape(12.dp)).background(t.bg).border(1.dp, t.border, RoundedCornerShape(12.dp)).padding(horizontal = 16.dp, vertical = 12.dp)) {
                     orderItems.forEach { oi ->
                         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("${oi.name} × ${oi.quantity}", color = t.text, fontSize = 14.sp)
