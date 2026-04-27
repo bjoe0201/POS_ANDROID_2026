@@ -35,6 +35,9 @@ data class SettingsUiState(
     val autoBackupFiles: List<BackupEntry> = emptyList(),
     val autoBackupStorageDesc: String = "下載／火鍋店POS備份",
     val autoBackupUsingCustom: Boolean = false,
+    val qtyRepeatIntervalMs: Int = 100,
+    val qtyRepeatInitialDelayMs: Int = 1000,
+    val hapticEnabled: Boolean = true,
     val message: String? = null
 )
 
@@ -119,6 +122,15 @@ class SettingsViewModel @Inject constructor(
                     )
                 }
             }
+            .launchIn(viewModelScope)
+        settingsRepository.qtyRepeatIntervalMs
+            .onEach { v -> _uiState.update { it.copy(qtyRepeatIntervalMs = v) } }
+            .launchIn(viewModelScope)
+        settingsRepository.qtyRepeatInitialDelayMs
+            .onEach { v -> _uiState.update { it.copy(qtyRepeatInitialDelayMs = v) } }
+            .launchIn(viewModelScope)
+        settingsRepository.hapticEnabled
+            .onEach { v -> _uiState.update { it.copy(hapticEnabled = v) } }
             .launchIn(viewModelScope)
     }
 
@@ -214,6 +226,18 @@ class SettingsViewModel @Inject constructor(
     fun setBreakEnd(v: String)     { viewModelScope.launch { settingsRepository.setBreakEnd(v) } }
     fun setDefaultDuration(v: Int) { viewModelScope.launch { settingsRepository.setDefaultDuration(v) } }
     fun setCalendarChipsPerRow(v: Int) { viewModelScope.launch { settingsRepository.setCalendarChipsPerRow(v) } }
+
+    fun setQtyRepeatIntervalMs(v: Int) {
+        viewModelScope.launch { settingsRepository.setQtyRepeatIntervalMs(v.coerceIn(30, 500)) }
+    }
+
+    fun setQtyRepeatInitialDelayMs(v: Int) {
+        viewModelScope.launch { settingsRepository.setQtyRepeatInitialDelayMs(v.coerceIn(300, 2000)) }
+    }
+
+    fun setHapticEnabled(v: Boolean) {
+        viewModelScope.launch { settingsRepository.setHapticEnabled(v) }
+    }
 
     fun changePin(currentPin: String, newPin: String, confirmPin: String, onResult: (Boolean, String) -> Unit) {
         val storedHash = pinHash.value

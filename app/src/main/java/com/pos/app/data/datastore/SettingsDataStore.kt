@@ -33,6 +33,9 @@ class SettingsDataStore(private val context: Context) {
         private val AUTO_BACKUP_IDLE_MINUTES = intPreferencesKey("auto_backup_idle_minutes")
         private val AUTO_BACKUP_RETENTION_DAYS = intPreferencesKey("auto_backup_retention_days")
         private val AUTO_BACKUP_EXTERNAL_TREE_URI = stringPreferencesKey("auto_backup_external_tree_uri")
+        private val QTY_REPEAT_INTERVAL_MS = intPreferencesKey("qty_repeat_interval_ms")
+        private val QTY_REPEAT_INITIAL_DELAY_MS = intPreferencesKey("qty_repeat_initial_delay_ms")
+        private val HAPTIC_ENABLED = booleanPreferencesKey("haptic_enabled")
         private const val DEFAULT_PIN = "1234"
 
         fun hashPin(pin: String): String {
@@ -113,6 +116,16 @@ class SettingsDataStore(private val context: Context) {
     suspend fun setAutoBackupIdleMinutes(v: Int) { context.dataStore.edit { it[AUTO_BACKUP_IDLE_MINUTES] = v } }
     suspend fun setAutoBackupRetentionDays(v: Int) { context.dataStore.edit { it[AUTO_BACKUP_RETENTION_DAYS] = v } }
     suspend fun setAutoBackupExternalTreeUri(v: String) { context.dataStore.edit { it[AUTO_BACKUP_EXTERNAL_TREE_URI] = v } }
+
+    // ── 點餐長按連續加減 ──
+    val qtyRepeatIntervalMs: Flow<Int> = context.dataStore.data.map { it[QTY_REPEAT_INTERVAL_MS] ?: 100 }
+    val qtyRepeatInitialDelayMs: Flow<Int> = context.dataStore.data.map { it[QTY_REPEAT_INITIAL_DELAY_MS] ?: 1000 }
+
+    suspend fun setQtyRepeatIntervalMs(v: Int) { context.dataStore.edit { it[QTY_REPEAT_INTERVAL_MS] = v } }
+    suspend fun setQtyRepeatInitialDelayMs(v: Int) { context.dataStore.edit { it[QTY_REPEAT_INITIAL_DELAY_MS] = v } }
+
+    val hapticEnabled: Flow<Boolean> = context.dataStore.data.map { it[HAPTIC_ENABLED] ?: true }
+    suspend fun setHapticEnabled(v: Boolean) { context.dataStore.edit { it[HAPTIC_ENABLED] = v } }
 
     fun verifyPin(inputPin: String, storedHash: String): Boolean = hashPin(inputPin) == storedHash
 }

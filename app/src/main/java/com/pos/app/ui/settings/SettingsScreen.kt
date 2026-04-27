@@ -162,6 +162,91 @@ fun SettingsScreen(
                     TabToggleRow(label = "報表",   emoji = "📊", enabled = uiState.tabReportEnabled, locked = false, onToggle = { viewModel.setTabReportEnabled(it) }, t = t)
                 }
 
+                // 點餐操作（長按連續加減）
+                SectionCard(title = "點餐操作", t = t) {
+                    // 觸覺回饋開關
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("觸覺回饋（震動）", color = t.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                            Text("點選與長按連續觸發時提供輕微震動", color = t.textMuted, fontSize = 12.sp)
+                        }
+                        Switch(
+                            checked = uiState.hapticEnabled,
+                            onCheckedChange = { viewModel.setHapticEnabled(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = t.accent,
+                                checkedTrackColor = t.accentDim2,
+                                uncheckedThumbColor = t.textMuted,
+                                uncheckedTrackColor = t.border
+                            )
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Box(modifier = Modifier.height(1.dp).fillMaxWidth().background(t.border))
+                    Spacer(Modifier.height(12.dp))
+
+                    Text("在記帳頁長按 +/− 可連續加減數量；放開停止。", color = t.textMuted, fontSize = 13.sp)
+                    Spacer(Modifier.height(12.dp))
+
+                    // 連續計數速度
+                    var intervalSlider by remember(uiState.qtyRepeatIntervalMs) {
+                        mutableStateOf(uiState.qtyRepeatIntervalMs.toFloat())
+                    }
+                    val perSecond = (1000f / intervalSlider).toInt().coerceAtLeast(1)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("連續計數速度", color = t.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text("間隔 ${intervalSlider.toInt()}ms（每秒約 $perSecond 次）", color = t.accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Slider(
+                        value = intervalSlider,
+                        onValueChange = { intervalSlider = it },
+                        onValueChangeFinished = { viewModel.setQtyRepeatIntervalMs(intervalSlider.toInt()) },
+                        valueRange = 30f..500f,
+                        steps = ((500 - 30) / 10) - 1,
+                        colors = SliderDefaults.colors(
+                            thumbColor = t.accent,
+                            activeTrackColor = t.accent,
+                            inactiveTrackColor = t.border
+                        )
+                    )
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("快 (30ms)", color = t.textMuted, fontSize = 11.sp)
+                        Text("慢 (500ms)", color = t.textMuted, fontSize = 11.sp)
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    // 長按啟動延遲
+                    var initialDelaySlider by remember(uiState.qtyRepeatInitialDelayMs) {
+                        mutableStateOf(uiState.qtyRepeatInitialDelayMs.toFloat())
+                    }
+                    val seconds = "%.1f".format(initialDelaySlider / 1000f)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("長按啟動延遲", color = t.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text("${seconds} 秒後開始連續", color = t.accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Slider(
+                        value = initialDelaySlider,
+                        onValueChange = { initialDelaySlider = it },
+                        onValueChangeFinished = { viewModel.setQtyRepeatInitialDelayMs(initialDelaySlider.toInt()) },
+                        valueRange = 300f..2000f,
+                        steps = ((2000 - 300) / 100) - 1,
+                        colors = SliderDefaults.colors(
+                            thumbColor = t.accent,
+                            activeTrackColor = t.accent,
+                            inactiveTrackColor = t.border
+                        )
+                    )
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("靈敏 (0.3s)", color = t.textMuted, fontSize = 11.sp)
+                        Text("保守 (2.0s)", color = t.textMuted, fontSize = 11.sp)
+                    }
+                }
+
                 // Reservation settings section
                 if (uiState.tabReservationEnabled) {
                     var showDurationMenu by remember { mutableStateOf(false) }

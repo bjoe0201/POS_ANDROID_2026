@@ -3,6 +3,9 @@ package com.pos.app.ui.order
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -23,9 +26,15 @@ import java.util.Locale
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.pos.app.data.db.entity.MenuItemEntity
 import com.pos.app.util.SoundEffects
@@ -33,6 +42,9 @@ import com.pos.app.data.db.entity.OrderItemEntity
 import com.pos.app.data.db.entity.TableEntity
 import com.pos.app.ui.theme.LocalPosColors
 import com.pos.app.ui.theme.PosColors
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -162,7 +174,17 @@ fun OrderScreen(
                         modifier = Modifier.fillMaxSize()
                     ) {
                         items(uiState.menuItems, key = { it.id }) { item ->
-                            MenuCard(item = item, qty = viewModel.getQuantityInOrder(item.id), compact = compact, onAdd = { viewModel.addItem(item) }, onRemove = { viewModel.removeItem(item) }, t = t)
+                            MenuCard(
+                                item = item,
+                                qty = viewModel.getQuantityInOrder(item.id),
+                                compact = compact,
+                                repeatIntervalMs = uiState.qtyRepeatIntervalMs,
+                                repeatInitialDelayMs = uiState.qtyRepeatInitialDelayMs,
+                                hapticEnabled = uiState.hapticEnabled,
+                                onAdd = { viewModel.addItem(item) },
+                                onRemove = { viewModel.removeItem(item) },
+                                t = t
+                            )
                         }
                     }
                 }
@@ -252,40 +274,210 @@ private fun PosChip(label: String, active: Boolean, compact: Boolean, onClick: (
 }
 
 @Composable
-private fun MenuCard(item: MenuItemEntity, qty: Int, compact: Boolean, onAdd: () -> Unit, onRemove: () -> Unit, t: PosColors) {
+private fun MenuCard(
+    item: MenuItemEntity,
+    qty: Int,
+    compact: Boolean,
+    repeatIntervalMs: Int,
+    repeatInitialDelayMs: Int,
+    hapticEnabled: Boolean,
+    onAdd: () -> Unit,
+    onRemove: () -> Unit,
+    t: PosColors
+) {
     val active = qty > 0
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (active) t.accentDim else t.card)
-            .border(1.dp, if (active) t.accent else t.border, RoundedCornerShape(12.dp))
-            .clickable { onAdd() }
-            .padding(if (compact) 8.dp else 10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 6.dp)
-    ) {
-        Text(item.name, color = if (active) t.accent else t.text, fontWeight = if (active) FontWeight.Bold else FontWeight.Medium, fontSize = if (compact) 13.sp else 14.sp, maxLines = 2)
-        Text("NT${"$"}${item.price.toLong()}", color = t.accent, fontSize = if (compact) 12.sp else 13.sp, fontWeight = FontWeight.ExtraBold)
-        if (active) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.clickable(false) {}) {
-                QtyBtn(label = "−", onClick = onRemove, t = t)
-                Text("$qty", color = t.accent, fontWeight = FontWeight.ExtraBold, fontSize = if (compact) 14.sp else 16.sp, modifier = Modifier.widthIn(min = 20.dp))
-                QtyBtn(label = "+", onClick = onAdd, t = t)
+
+    // Bubble state
+    var bubbleVisible by remember { mutableStateOf(false) }
+    var bubbleIsPlus by remember { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
+    var hideJob: Job? by remember { mutableStateOf(null) }
+    val haptics = LocalHapticFeedback.current
+
+    // 單擊放開後保留氣泡 600ms 再隱藏；連續模式放開時也走相同收尾
+    fun showBubble(isPlus: Boolean) {
+        hideJob?.cancel()
+        bubbleIsPlus = isPlus
+        bubbleVisible = true
+    }
+    fun scheduleHideBubble() {
+        hideJob?.cancel()
+        hideJob = scope.launch {
+            delay(600)
+            bubbleVisible = false
+        }
+    }
+
+    Box {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(if (active) t.accentDim else t.card)
+                .border(1.dp, if (active) t.accent else t.border, RoundedCornerShape(12.dp))
+                .clickable {
+                    if (hapticEnabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    showBubble(true); onAdd(); scheduleHideBubble()
+                }
+                .padding(if (compact) 8.dp else 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 6.dp)
+        ) {
+            Text(
+                item.name,
+                color = if (active) t.accent else t.text,
+                fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                fontSize = if (compact) 13.sp else 14.sp,
+                maxLines = 2
+            )
+            Text(
+                "NT${"$"}${item.price.toLong()}",
+                color = t.accent,
+                fontSize = if (compact) 12.sp else 13.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
+            if (active) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.clickable(false) {}
+                ) {
+                    RepeatableQtyButton(
+                        label = "−",
+                        isPlus = false,
+                        intervalMs = repeatIntervalMs,
+                        initialDelayMs = repeatInitialDelayMs,
+                        hapticEnabled = hapticEnabled,
+                        onTrigger = onRemove,
+                        onPressStart = { showBubble(false) },
+                        onPressEnd = { scheduleHideBubble() }
+                    )
+                    Text(
+                        "$qty",
+                        color = t.accent,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = if (compact) 14.sp else 16.sp,
+                        modifier = Modifier.widthIn(min = 20.dp)
+                    )
+                    RepeatableQtyButton(
+                        label = "+",
+                        isPlus = true,
+                        intervalMs = repeatIntervalMs,
+                        initialDelayMs = repeatInitialDelayMs,
+                        hapticEnabled = hapticEnabled,
+                        onTrigger = onAdd,
+                        onPressStart = { showBubble(true) },
+                        onPressEnd = { scheduleHideBubble() }
+                    )
+                }
+            } else {
+                Text("點選加入", color = t.textMuted, fontSize = if (compact) 10.sp else 11.sp)
             }
-        } else {
-            Text("點選加入", color = t.textMuted, fontSize = if (compact) 10.sp else 11.sp)
+        }
+
+        // 即時數字氣泡（懸浮在卡片上方）
+        if (bubbleVisible) {
+            val bubbleBg = if (bubbleIsPlus) Color(0xFFFFC400) else Color(0xFF00C853)
+            Popup(
+                alignment = Alignment.TopCenter,
+                offset = IntOffset(0, -180),
+                properties = PopupProperties(focusable = false, dismissOnClickOutside = false)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(bubbleBg)
+                        .border(2.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+                        .padding(horizontal = 18.dp, vertical = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            if (bubbleIsPlus) "+" else "−",
+                            color = Color.White,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 18.sp
+                        )
+                        Text(
+                            "$qty",
+                            color = Color.White,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 24.sp
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
+/**
+ * 可長按連續觸發的數量按鈕。
+ * - 短按：down 立即觸發一次（onTrigger）。
+ * - 長按超過 [initialDelayMs]：以 [intervalMs] 間隔反覆觸發直到放開。
+ * - 加減使用不同色調：+ 亮黃；− 亮綠。
+ */
 @Composable
-private fun QtyBtn(label: String, onClick: () -> Unit, t: PosColors) {
+private fun RepeatableQtyButton(
+    label: String,
+    isPlus: Boolean,
+    intervalMs: Int,
+    initialDelayMs: Int,
+    hapticEnabled: Boolean,
+    onTrigger: () -> Unit,
+    onPressStart: () -> Unit,
+    onPressEnd: () -> Unit
+) {
+    val bg = if (isPlus) Color(0xFFFFD600).copy(alpha = 0.18f) else Color(0xFF00E676).copy(alpha = 0.18f)
+    val fg = if (isPlus) Color(0xFFFFC400) else Color(0xFF00C853)
+    val border = if (isPlus) Color(0xFFFFC400).copy(alpha = 0.55f) else Color(0xFF00C853).copy(alpha = 0.55f)
+
+    val haptics = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
+    // 保留最新的 onTrigger 參考，避免 pointerInput 重啟
+    val triggerState = rememberUpdatedState(onTrigger)
+    val pressStartState = rememberUpdatedState(onPressStart)
+    val pressEndState = rememberUpdatedState(onPressEnd)
+
     Box(
-        modifier = Modifier.size(24.dp).clip(RoundedCornerShape(6.dp)).background(t.accentDim2).clickable { onClick() },
+        modifier = Modifier
+            .size(28.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(bg)
+            .border(1.dp, border, RoundedCornerShape(6.dp))
+            .pointerInput(intervalMs, initialDelayMs) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    pressStartState.value()
+                    // 單擊立即觸發 + 輕震動回饋
+                    if (hapticEnabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    triggerState.value()
+                    var repeatJob: Job? = null
+                    repeatJob = scope.launch {
+                        delay(initialDelayMs.toLong())
+                        // 進入連續模式：較強回饋一次
+                        if (hapticEnabled) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        var count = 0
+                        while (true) {
+                            triggerState.value()
+                            count++
+                            if (hapticEnabled && count % 5 == 0) {
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            }
+                            delay(intervalMs.toLong())
+                        }
+                    }
+                    // 等到放開或取消
+                    waitForUpOrCancellation()
+                    repeatJob?.cancel()
+                    pressEndState.value()
+                    down.consume()
+                }
+            },
         contentAlignment = Alignment.Center
-    ) { Text(label, color = t.accent, fontWeight = FontWeight.Bold, fontSize = 14.sp) }
+    ) {
+        Text(label, color = fg, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+    }
 }
 
 @Composable

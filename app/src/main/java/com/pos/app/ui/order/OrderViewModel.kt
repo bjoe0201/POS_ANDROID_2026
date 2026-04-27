@@ -10,6 +10,7 @@ import com.pos.app.data.db.entity.TableEntity
 import com.pos.app.data.repository.MenuGroupRepository
 import com.pos.app.data.repository.MenuRepository
 import com.pos.app.data.repository.OrderRepository
+import com.pos.app.data.repository.SettingsRepository
 import com.pos.app.data.repository.TableRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -47,7 +48,10 @@ data class OrderUiState(
     val selectedCategory: String = "HOTPOT_BASE",
     val remark: String = "",
     val openOrderTotals: Map<Long, Double> = emptyMap(),
-    val selectedDate: Long = startOfDay(System.currentTimeMillis())
+    val selectedDate: Long = startOfDay(System.currentTimeMillis()),
+    val qtyRepeatIntervalMs: Int = 100,
+    val qtyRepeatInitialDelayMs: Int = 1000,
+    val hapticEnabled: Boolean = true
 ) {
     val total: Double get() = orderItems.sumOf { it.price * it.quantity }
     val itemCount: Int get() = orderItems.sumOf { it.quantity }
@@ -58,7 +62,8 @@ class OrderViewModel @Inject constructor(
     private val orderRepository: OrderRepository,
     private val menuGroupRepository: MenuGroupRepository,
     private val menuRepository: MenuRepository,
-    private val tableRepository: TableRepository
+    private val tableRepository: TableRepository,
+    private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(OrderUiState())
@@ -102,6 +107,16 @@ class OrderViewModel @Inject constructor(
                 }) { pairs -> pairs.toMap() }
             }
             .onEach { totals -> _uiState.update { it.copy(openOrderTotals = totals) } }
+            .launchIn(viewModelScope)
+
+        settingsRepository.qtyRepeatIntervalMs
+            .onEach { v -> _uiState.update { it.copy(qtyRepeatIntervalMs = v) } }
+            .launchIn(viewModelScope)
+        settingsRepository.qtyRepeatInitialDelayMs
+            .onEach { v -> _uiState.update { it.copy(qtyRepeatInitialDelayMs = v) } }
+            .launchIn(viewModelScope)
+        settingsRepository.hapticEnabled
+            .onEach { v -> _uiState.update { it.copy(hapticEnabled = v) } }
             .launchIn(viewModelScope)
     }
 
