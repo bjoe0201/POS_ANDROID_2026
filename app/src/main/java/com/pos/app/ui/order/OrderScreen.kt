@@ -295,6 +295,15 @@ private fun MenuCard(
     val scope = rememberCoroutineScope()
     var hideJob: Job? by remember { mutableStateOf(null) }
     val haptics = LocalHapticFeedback.current
+    val onAddState = rememberUpdatedState(onAdd)
+
+    // qty 歸零時立即隱藏氣泡
+    LaunchedEffect(qty) {
+        if (qty <= 0) {
+            hideJob?.cancel()
+            bubbleVisible = false
+        }
+    }
 
     // 單擊放開後保留氣泡 600ms 再隱藏；連續模式放開時也走相同收尾
     fun showBubble(isPlus: Boolean) {
@@ -317,9 +326,26 @@ private fun MenuCard(
                 .clip(RoundedCornerShape(12.dp))
                 .background(if (active) t.accentDim else t.card)
                 .border(1.dp, if (active) t.accent else t.border, RoundedCornerShape(12.dp))
-                .clickable {
-                    if (hapticEnabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    showBubble(true); onAdd(); scheduleHideBubble()
+                .pointerInput(repeatIntervalMs, repeatInitialDelayMs) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = true)
+                        showBubble(true)
+                        if (hapticEnabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onAddState.value()
+                        var repeatJob: Job? = null
+                        repeatJob = scope.launch {
+                            delay(repeatInitialDelayMs.toLong())
+                            if (hapticEnabled) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            while (true) {
+                                onAddState.value()
+                                delay(repeatIntervalMs.toLong())
+                            }
+                        }
+                        waitForUpOrCancellation()
+                        repeatJob?.cancel()
+                        scheduleHideBubble()
+                        down.consume()
+                    }
                 }
                 .padding(if (compact) 8.dp else 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -450,6 +476,7 @@ private fun RepeatableQtyButton(
             .pointerInput(intervalMs, initialDelayMs) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
+                    down.consume() // 立即消費，避免父層 pointerInput 重複觸發
                     pressStartState.value()
                     // 單擊立即觸發 + 輕震動回饋
                     if (hapticEnabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -473,7 +500,6 @@ private fun RepeatableQtyButton(
                     waitForUpOrCancellation()
                     repeatJob?.cancel()
                     pressEndState.value()
-                    down.consume()
                 }
             },
         contentAlignment = Alignment.Center
