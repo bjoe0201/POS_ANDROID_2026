@@ -1,0 +1,503 @@
+# USB 熱感印表機功能設計文件
+
+> 建立日期：2026-04-28
+> 最後更新：2026-04-28
+> 實作版本：v1.2.5+
+> 狀態：**紙張寬度已校正完成（PRINT_WIDTH_PX = 360）／收據版面強化中**
+
+---
+
+## 目錄
+
+1. [功能概述](#功能概述)
+2. [硬體環境](#硬體環境)
+3. [Android USB 連接方式](#android-usb-連接方式)
+4. [架構設計](#架構設計)
+5. [ESC/POS 指令說明](#escpos-指令說明)
+6. [Bitmap 列印模式（中文支援）](#bitmap-列印模式中文支援)
+7. [紙張寬度校正紀錄](#紙張寬度校正紀錄)
+8. [DataStore 設定鍵](#datastore-設定鍵)
+9. [UI 流程](#ui-流程)
+10. [檔案結構](#檔案結構)
+11. [已知問題與限制](#已知問題與限制)
+12. [調整參數方式](#調整參數方式)
+
+---
+
+## 功能概述
+
+透過 Android USB Host API（OTG）直接與 EPSON 熱感印表機通訊，傳送 ESC/POS 指令列印：
+
+| 功能 | 觸發時機 | 開關位置 |
+|------|----------|----------|
+| **測試列印** | 設定頁手動按下 | 設定 → 印表機 → 測試列印 |
+| **收款結帳列印** | 確認收款後自動觸發 | 設定 → 印表機 → 收款結帳列印（Switch） |
+| **訂單明細列印** | 報表頁逐筆手動觸發 | 設定 → 印表機 → 明細列印（Switch） |
+
+> Switch 開關只在「測試列印通過」後才顯示，確保印表機連線可用。
+
+---
+
+## 硬體環境
+
+### 實測印表機
+
+| 項目 | 值 |
+|------|----|
+| 型號 | EPSON TM-T70II |
+| 連接 | USB（Android OTG/USB Host） |
+| VendorID | `0x04B8`（EPSON） |
+| ProductID | `0x0202` |
+| 解析度 | 203 DPI |
+| 機體設計紙寬 | 80mm（印表機規格） |
+| 實際使用紙寬 | **58mm**（裝入 80mm 機體） |
+
+### 58mm 紙裝入 80mm 印表機的問題
+
+EPSON TM-T70II 的印字頭設計寬度為 80mm（576 dots @ 203 DPI），但本機裝入 58mm 紙張。
+這造成以下挑戰：
+
+- 印字頭從固定位置開始列印（左起 dot 0）
+- 58mm 紙張的有效列印寬度 ≈ 463 dots，但實際可安全使用的寬度更小（含左側偏移與右邊距）
+- **若 Bitmap 寬度過大，右側內容超出紙張邊界被截斷**
+- **若 Bitmap 寬度與偏移未對齊紙張，左側內容印在紙張外部（空白區域）**
+
+---
+
+## Android USB 連接方式
+
+### AndroidManifest.xml
+
+```xml
+<!-- USB Host 功能聲明 -->
+<uses-feature android:name="android.hardware.usb.host" android:required="false" />
+
+<!-- 插入 EPSON 裝置時自動啟動 App -->
+<intent-filter>
+    <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+</intent-filter>
+<meta-data
+    android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+    android:resource="@xml/usb_device_filter" />
+```
+
+### res/xml/usb_device_filter.xml
+
+```xml
+<resources>
+    <!-- EPSON Vendor ID: 0x04B8 = 1208 -->
+    <usb-device vendor-id="1208" />
+</resources>
+```
+
+### 權限流程
+
+```
+1. 呼叫 UsbManager.deviceList 列舉已連接裝置
+2. 優先找 vendorId == 0x04B8（EPSON），無則 fallback 任何裝置
+3. UsbManager.hasPermission(device) 檢查是否已有授權
+4. 若無 → 發送 PendingIntent 彈出系統「允許使用 USB 裝置」對話框
+5. BroadcastReceiver 接收結果（RECEIVER_NOT_EXPORTED @ Android 13+）
+6. 授權後開啟 UsbDeviceConnection，claimInterface，bulkTransfer
+```
+
+---
+
+## 架構設計
+
+### 主要元件
+
+```
+util/
+  UsbPrinterManager.kt     — 單例 object，封裝所有 USB 印表機邏輯
+
+data/datastore/
+  SettingsDataStore.kt     — 新增 3 個 DataStore keys
+
+data/repository/
+  SettingsRepository.kt    — 對應 flows / setters
+
+ui/settings/
+  SettingsViewModel.kt     — 新增 3 個 state 欄位與 setter
+  SettingsScreen.kt        — PrinterSection composable
+
+ui/order/
+  OrderViewModel.kt        — 新增 printCheckoutEnabled state
+  OrderScreen.kt           — 確認收款後自動列印
+
+ui/report/
+  ReportViewModel.kt       — 新增 printDetailEnabled state（注入 SettingsRepository）
+  ReportScreen.kt          — OrderSummaryRow 新增列印按鈕
+```
+
+### UsbPrinterManager 公開 API
+
+```kotlin
+object UsbPrinterManager {
+    // 查詢
+    fun findPrinterDevice(context): UsbDevice?
+    fun hasPermission(context, device): Boolean
+    fun requestPermission(context, device, onResult: (Boolean) -> Unit)
+
+    // 列印（suspend，在 Dispatchers.IO 執行）
+    suspend fun printTestPage(context, device): Result<Unit>
+    suspend fun printCheckoutReceipt(
+        context, tableName, items, total, remark,
+        orderId: Long = 0L,                       // ← 新增：訂單編號
+        createdAt: Long = System.currentTimeMillis() // ← 新增：開單時間
+    ): Result<Unit>
+    suspend fun printOrderDetail(context, orderId, tableName, createdAt, items, total): Result<Unit>
+}
+```
+
+---
+
+## ESC/POS 指令說明
+
+### 測試頁（紙寬校準頁，ASCII + Bitmap 混合）
+
+測試頁設計為**紙寬校準工具**，包含兩個區段：
+
+#### 區段 A — ASCII 字元尺（CHAR RULER）
+送出兩條 80 字元長的數字字串（不加 LF），由印表機自動 wrap。觀察紙上每行印出的字元數即可推算印表機目前的字元欄寬：
+
+| 每行字元數 | 對應紙寬 / 字型模式 |
+|-----------|-------------------|
+| 32 | 58mm 字型 A |
+| 42 | 80mm 字型 B |
+| 48 | 80mm 字型 A |
+
+#### 區段 B — Bitmap 寬度測試條（WIDTH BARS）
+依序送出 `288 / 320 / 360 / 384 / 432 / 480 / 576` dots 七種寬度的 raster bitmap，每條左端標註寬度數字、右端為 `||` 終端標記。
+
+**判讀方式**：選擇「最後一條右端 `||` 仍完整、且左端寬度數字未被截斷」的數值作為 `PRINT_WIDTH_PX`。
+
+### 主要指令對照
+
+| 指令 | Hex | 說明 |
+|------|-----|------|
+| ESC @ | `1B 40` | 初始化印表機 |
+| ESC a n | `1B 61 01` | 對齊方式（0=左、1=中、2=右） |
+| GS ! n | `1D 21 11` | 字元放大（0x11 = 雙寬雙高） |
+| LF | `0A` | 換行 |
+| GS V A | `1D 56 41 10` | 半切（Partial Cut，進紙 16mm） |
+
+### Bitmap 列印（中文收據）
+
+| 指令 | Hex | 說明 |
+|------|-----|------|
+| ESC @ | `1B 40` | 初始化 |
+| GS v 0 | `1D 76 30 00 xL xH yL yH data` | 點陣圖列印 |
+| GS V A | `1D 56 41 10` | 半切 |
+
+#### GS v 0 格式
+
+```
+1D 76 30  m  xL xH  yL yH  d1...dk
+               ↑              ↑
+        每行 byte 數       行數（高度）
+       (ceil(widthPx/8))
+```
+
+- `m = 0x00`：正常大小（1:1）
+- `xL xH`：每行 bytes = ceil(PRINT_WIDTH_PX / 8)
+- `yL yH`：Bitmap 高度（行數）
+- `data`：逐行掃描，MSB 在前，1=黑，0=白
+
+---
+
+## Bitmap 列印模式（中文支援）
+
+### 為何使用 Bitmap 模式
+
+EPSON TM-T70II 標準機型的內建字型只支援 ASCII 及部分歐語字元集，**不支援直接輸出繁體中文**。
+
+解決方案：使用 Android 的 `Canvas/Bitmap` API 將文字渲染成點陣圖，再以 `GS v 0` 指令傳送給印表機。此法相容所有 EPSON 熱感印表機，不依賴機體內建字型。
+
+### 渲染流程
+
+```
+List<RL>（收據行定義）
+    ↓ renderBitmap()
+Android Bitmap（ARGB_8888）
+    ↓ toEscPosRaster()
+ByteArray（GS v 0 點陣資料）
+    ↓ wrapBitmap()
+ESC @ + GS v 0 data + GS V A
+    ↓ sendToDevice()
+UsbDeviceConnection.bulkTransfer()（4096 bytes / chunk）
+```
+
+### RL（Receipt Line）資料模型
+
+```kotlin
+private data class RL(
+    val text: String,          // 左側文字（或唯一文字）
+    val right: String = "",    // 右側文字（金額欄，靠右對齊）
+    val align: A = A.LEFT,     // LEFT / CENTER
+    val bold: Boolean = false,
+    val large: Boolean = false
+)
+```
+
+分隔線偵測：`text.startsWith("═")` 或 `text.startsWith("─")` → 改以 `canvas.drawLine()` 繪製，確保填滿寬度。
+
+---
+
+## 紙張寬度校正紀錄
+
+### 問題根因分析
+
+EPSON TM-T70II 為 80mm 機體（印字頭 576 dots），裝入 58mm 紙時存在**起始位置偏移**：
+- Bitmap 從 dot 0 開始，但紙張左邊界不在 dot 0
+- 若 Bitmap 太寬，右側超出紙張邊界
+
+### 測試歷程
+
+| 嘗試 | PRINT_WIDTH_PX | L_MARGIN | R_MARGIN | 結果 |
+|------|----------------|----------|----------|------|
+| 第 1 次 | 576 | 10 | 10 | 內容旋轉 90°（寬度超出，行資料錯位） |
+| 第 2 次 | 384 | 10 | 10 | 左側內容起始在紙外、右側超出邊界 |
+| 第 3 次 | 320 | 10 | 10 | 右側 `NT$xxx` 結尾仍 wrap 到下一行左邊（出現 "NT" / "↑" 殘字） |
+| 第 4 次 | 384 | 16 | 32 | 加大右邊距 + 加入 reset 指令 + 名稱截斷 |
+| 第 5 次 | 384 | 16 | 32 | 仍有右側 wrap 殘字 → 改用紙寬校準頁實測 |
+| **第 6 次** | **360** | **12** | **12** | **✅ 校準頁顯示 360 dots 是最後一條 `\|\|` 完整、左端數字完整的寬度** |
+
+### 校準結論（第 6 次，當前實作）
+
+透過紙寬校準頁實測：
+
+- `288 / 320 / 360 dots`：左端寬度數字、右端 `||` 終端標記**全部完整**
+- `384 dots`：橫線延伸到紙張右邊界，但 `||` 終端標記被截
+- `432 / 480 / 576 dots`：右側明顯被截斷
+
+→ **取最大可用值 `PRINT_WIDTH_PX = 360`** 作為實際參數，配合 `L_MARGIN = 12 / R_MARGIN = 12` 並送出 `GS L`（左邊距=0）+ `GS W`（列印區寬度）強制告知印表機列印區寬度，避免依預設區寬自行 wrap。
+
+### 當前參數
+
+```kotlin
+private const val PRINT_WIDTH_PX = 360   // Bitmap 寬度（dots）— 校準頁實測最後完整值
+private const val L_MARGIN = 12f         // 文字左邊距（px）
+private const val R_MARGIN = 12f         // 文字右邊距（px）
+private const val SEP = 20               // 分隔線輔助常數（畫線時使用 widthPx 全寬）
+private const val NAME_MAX_VW = 14       // 名稱視覺寬度上限（中文=2, ASCII=1）
+```
+
+### 調整建議
+
+若仍有偏差：
+
+| 現象 | 調整方向 |
+|------|----------|
+| 右側 `NT$xxx` 仍 wrap 到下一行左邊 | 減小 `PRINT_WIDTH_PX`（每次 -8 px，即 -1mm） |
+| 右側有大片空白、內容偏左 | 增大 `PRINT_WIDTH_PX`（注意不要超過校準頁實測值） |
+| 左側第一個字被截 | 增大 `L_MARGIN`（+4f 約 +0.5mm） |
+| 左側空白太多 | 減小 `L_MARGIN` |
+| 紙張改變（換紙寬 / 換印表機） | **先重印「紙寬校準頁」**（設定 → 印表機 → 測試列印），再依結果調整 `PRINT_WIDTH_PX` |
+
+**理論最大安全寬度**（58mm 紙 @ 203 DPI）：
+```
+58mm × (203 / 25.4) ≈ 463 dots（含紙張左右邊距約各 1.5mm）
+實際可用 ≈ 440 dots，但因 80mm 機體偏移，安全值更低
+```
+
+---
+
+## DataStore 設定鍵
+
+| Key | 類型 | 預設 | 說明 |
+|-----|------|------|------|
+| `printer_test_passed` | Boolean | false | 測試列印是否通過（通過後才顯示功能 Switch） |
+| `print_checkout_enabled` | Boolean | false | 確認收款後自動列印收據 |
+| `print_detail_enabled` | Boolean | false | 報表訂單明細顯示逐筆列印按鈕 |
+
+---
+
+## UI 流程
+
+### 設定頁 — 印表機區塊
+
+```
+[印表機] Section
+  ├── 說明文字
+  ├── 狀態訊息框（deviceName、VendorID、授權狀態、列印結果）
+  ├── [測試列印] 按鈕
+  │     ├── 點擊 → findPrinterDevice()
+  │     ├── 無裝置 → 錯誤提示
+  │     ├── 無權限 → requestPermission() → 系統對話框
+  │     └── 列印成功 → setPrinterTestPassed(true) → 顯示 Switch
+  │
+  └── [若 printerTestPassed == true]
+        ├── Switch：收款結帳列印
+        └── Switch：明細列印
+```
+
+### 記帳頁 — 確認收款
+
+```
+[確認收款] 按鈕
+  └── onConfirm = {
+        val tName       = uiState.selectedTable?.tableName ?: ""
+        val tTotal      = uiState.total
+        val tItems      = uiState.orderItems.toList()       // 在 payOrder 前快照
+        val tRemark     = uiState.remark
+        val tOrderId    = uiState.order?.id ?: 0L           // ← 新增
+        val tCreatedAt  = uiState.order?.createdAt          // ← 新增（開單時間）
+                          ?: System.currentTimeMillis()
+        val shouldPrint = uiState.printCheckoutEnabled
+        viewModel.payOrder {
+            SoundEffects.playPaymentSuccess()
+            if (shouldPrint) {
+                scope.launch {
+                    UsbPrinterManager.printCheckoutReceipt(
+                        context, tName, tItems, tTotal, tRemark,
+                        tOrderId, tCreatedAt
+                    )
+                }
+            }
+        }
+      }
+```
+
+### 報表頁 — 訂單明細列印
+
+```
+OrderSummaryRow（展開後）
+  └── [若 printDetailEnabled && !isDeleted]
+        └── [列印明細] OutlinedButton
+              └── scope.launch {
+                    UsbPrinterManager.printOrderDetail(...)
+                  }
+```
+
+---
+
+## 收據版面
+
+### 收款收據（printCheckoutReceipt） — 強化版（v1.2.5+）
+
+包含**訂單編號、開單時間、結帳時間、項目數**等完整對帳資訊：
+
+```
+══════════════════════
+        1 號桌
+══════════════════════
+訂單編號           #32
+開單時間   2026-04-28 21:00
+結帳時間   2026-04-28 21:14
+──────────────────────
+酒桃輝哥 ×1        NT$300
+狗燈 ×1             NT$50
+很菜 ×3            NT$150
+西歐否 ×1          NT$100
+狗加 ×1             NT$80
+密魯 ×1            NT$100
+──────────────────────
+項目數               8
+合　計             NT$780
+══════════════════════
+備註：XXX（選填）
+
+      謝謝光臨！
+```
+
+> 若 `orderId == 0L`（理論上不會發生，僅為安全預設），則「訂單編號」行會自動隱藏。
+
+### 訂單明細（printOrderDetail）
+
+```
+══════════════════════
+    訂單明細  #32
+══════════════════════
+1號桌  2026-04-27 21:46
+
+酒桃輝哥 ×1        NT$300
+很菜 ×4            NT$200
+─────────────────────
+合　計             NT$500
+══════════════════════
+```
+
+---
+
+## 檔案結構
+
+```
+app/src/main/
+├── AndroidManifest.xml                         ← USB Host feature + device filter
+├── res/xml/usb_device_filter.xml               ← EPSON VendorID 1208 過濾
+└── java/com/pos/app/
+    ├── util/
+    │   └── UsbPrinterManager.kt                ← 核心列印邏輯
+    ├── data/
+    │   ├── datastore/SettingsDataStore.kt       ← 3 個新 key
+    │   └── repository/SettingsRepository.kt    ← 對應 flows/setters
+    └── ui/
+        ├── settings/
+        │   ├── SettingsViewModel.kt             ← printer state + setters
+        │   └── SettingsScreen.kt               ← PrinterSection composable
+        ├── order/
+        │   ├── OrderViewModel.kt               ← printCheckoutEnabled state
+        │   └── OrderScreen.kt                  ← 確認收款後列印
+        └── report/
+            ├── ReportViewModel.kt              ← printDetailEnabled（注入 SettingsRepository）
+            └── ReportScreen.kt                 ← OrderSummaryRow 列印按鈕
+```
+
+---
+
+## 已知問題與限制
+
+### 中文字型
+
+- 使用 Android 系統預設字型（`Typeface.DEFAULT`），各裝置渲染結果略有差異
+- 字型大小設為 22px，在 320px 寬度下約可容納 **14 個半形** 或 **7 個全形**（中文）字元
+- 品項名稱較長時，目前**不自動換行**，超出部分會被 Bitmap 邊界截掉
+
+### USB 權限
+
+- 第一次連接需使用者手動授權，**重開 App 後不需重新授權**（Android 系統快取）
+- App 重啟後仍需呼叫 `hasPermission()` 確認（部分裝置在重開後可能需再次授權）
+
+### 列印失敗處理
+
+- 目前列印失敗只輸出 `Result.failure`，UI 端不顯示 Snackbar（待改善）
+- 收款結帳後若列印失敗，收款資料已寫入資料庫（不影響帳務）
+
+### 80mm 機體裝 58mm 紙
+
+- 這是非標準用法，**強烈建議換用標準 58mm 熱感印表機**（如 EPSON TM-T20III-5GJ1）
+- 或換用 80mm 紙張（TM-T70II 原廠規格）使用 `PRINT_WIDTH_PX = 576`
+
+---
+
+## 調整參數方式
+
+所有列印尺寸參數集中在 `UsbPrinterManager.kt` 頂層（`private const`）：
+
+```kotlin
+// ── 紙張 ──
+private const val PRINT_WIDTH_PX = 360   // Bitmap 寬度（dots）。校準頁實測值
+private const val L_MARGIN = 12f         // 文字左邊距（px）
+private const val R_MARGIN = 12f         // 文字右邊距（px）
+private const val SEP = 20               // 分隔線輔助常數
+private const val NAME_MAX_VW = 14       // 品項名稱視覺寬度上限（中文=2, ASCII=1）
+
+// ── 字型（renderBitmap 內的 local val）──
+val normalSz = 22f      // 一般文字大小
+val largeSz = 30f       // 標題文字大小（桌號）
+val normalLH = 32       // 一般行高（px）
+val largeLH = 44        // 大字行高（px）
+val blankLH = 12        // 空行高度（px）
+val padTop = 6          // 頂部留白
+val padBot = 12         // 底部留白
+```
+
+**換紙寬 / 換印表機時的標準流程：**
+
+1. 設定頁 → 印表機 → **測試列印** → 取得「紙寬校準頁」
+2. 觀察區段 B 的寬度條，找出最後一條**右端 `||` 完整、左端寬度數字未截**的數值
+3. 將該值填入 `PRINT_WIDTH_PX`，重新 Build + Install
+4. 再次測試列印確認排版無誤後，至設定頁開啟「收款結帳列印 / 明細列印」Switch
+
+修改後需重新 Build + Install 再測試列印。

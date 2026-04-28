@@ -110,6 +110,8 @@ fun OrderScreen(
                 val tTotal = uiState.total
                 val tItems = uiState.orderItems.toList()
                 val tRemark = uiState.remark
+                val tOrderId = uiState.order?.id ?: 0L
+                val tCreatedAt = uiState.order?.createdAt ?: System.currentTimeMillis()
                 val shouldPrint = uiState.printCheckoutEnabled
                 viewModel.payOrder {
                     showCheckout = false
@@ -117,7 +119,9 @@ fun OrderScreen(
                     SoundEffects.playPaymentSuccess()
                     if (shouldPrint) {
                         scope.launch {
-                            UsbPrinterManager.printCheckoutReceipt(context, tName, tItems, tTotal, tRemark)
+                            UsbPrinterManager.printCheckoutReceipt(
+                                context, tName, tItems, tTotal, tRemark, tOrderId, tCreatedAt
+                            )
                         }
                     }
                 }
