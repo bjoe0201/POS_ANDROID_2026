@@ -26,6 +26,9 @@ class SettingsRepository @Inject constructor(private val dataStore: SettingsData
     val qtyRepeatIntervalMs: Flow<Int> = dataStore.qtyRepeatIntervalMs
     val qtyRepeatInitialDelayMs: Flow<Int> = dataStore.qtyRepeatInitialDelayMs
     val hapticEnabled: Flow<Boolean> = dataStore.hapticEnabled
+    val printerTestPassed: Flow<Boolean>    = dataStore.printerTestPassed
+    val printCheckoutEnabled: Flow<Boolean> = dataStore.printCheckoutEnabled
+    val printDetailEnabled: Flow<Boolean>   = dataStore.printDetailEnabled
 
     suspend fun setPin(newPin: String) = dataStore.setPin(newPin)
     fun verifyPin(input: String, hash: String) = dataStore.verifyPin(input, hash)
@@ -45,5 +48,8 @@ class SettingsRepository @Inject constructor(private val dataStore: SettingsData
     suspend fun setAutoBackupExternalTreeUri(v: String) = dataStore.setAutoBackupExternalTreeUri(v)
     suspend fun setQtyRepeatIntervalMs(v: Int) = dataStore.setQtyRepeatIntervalMs(v.coerceIn(30, 500))
     suspend fun setQtyRepeatInitialDelayMs(v: Int) = dataStore.setQtyRepeatInitialDelayMs(v.coerceIn(300, 2000))
-    suspend fun setHapticEnabled(v: Boolean) = dataStore.setHapticEnabled(v)
+    suspend fun setHapticEnabled(v: Boolean)        = dataStore.setHapticEnabled(v)
+    suspend fun setPrinterTestPassed(v: Boolean)    = dataStore.setPrinterTestPassed(v)
+    suspend fun setPrintCheckoutEnabled(v: Boolean) = dataStore.setPrintCheckoutEnabled(v)
+    suspend fun setPrintDetailEnabled(v: Boolean)   = dataStore.setPrintDetailEnabled(v)
 }

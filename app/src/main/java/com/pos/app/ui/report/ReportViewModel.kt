@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.pos.app.data.db.entity.OrderEntity
 import com.pos.app.data.db.entity.OrderItemEntity
 import com.pos.app.data.repository.OrderRepository
+import com.pos.app.data.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -40,12 +41,14 @@ data class ReportUiState(
     val itemRanking: List<Pair<String, Int>> = emptyList(),
     val groupRanking: List<GroupSalesStat> = emptyList(),
     val message: String? = null,
-    val isLoading: Boolean = true
+    val isLoading: Boolean = true,
+    val printDetailEnabled: Boolean = false
 )
 
 @HiltViewModel
 class ReportViewModel @Inject constructor(
-    private val orderRepository: OrderRepository
+    private val orderRepository: OrderRepository,
+    private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ReportUiState())
@@ -58,6 +61,9 @@ class ReportViewModel @Inject constructor(
                 recompute(allOrders, _uiState.value.dateRange, _uiState.value.showDeleted)
             }
         }
+        settingsRepository.printDetailEnabled
+            .onEach { v -> _uiState.update { it.copy(printDetailEnabled = v) } }
+            .launchIn(viewModelScope)
     }
 
     fun setDateRange(range: DateRange) {

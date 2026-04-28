@@ -38,6 +38,9 @@ data class SettingsUiState(
     val qtyRepeatIntervalMs: Int = 100,
     val qtyRepeatInitialDelayMs: Int = 1000,
     val hapticEnabled: Boolean = true,
+    val printerTestPassed: Boolean = false,
+    val printCheckoutEnabled: Boolean = false,
+    val printDetailEnabled: Boolean = false,
     val message: String? = null
 )
 
@@ -131,6 +134,15 @@ class SettingsViewModel @Inject constructor(
             .launchIn(viewModelScope)
         settingsRepository.hapticEnabled
             .onEach { v -> _uiState.update { it.copy(hapticEnabled = v) } }
+            .launchIn(viewModelScope)
+        settingsRepository.printerTestPassed
+            .onEach { v -> _uiState.update { it.copy(printerTestPassed = v) } }
+            .launchIn(viewModelScope)
+        settingsRepository.printCheckoutEnabled
+            .onEach { v -> _uiState.update { it.copy(printCheckoutEnabled = v) } }
+            .launchIn(viewModelScope)
+        settingsRepository.printDetailEnabled
+            .onEach { v -> _uiState.update { it.copy(printDetailEnabled = v) } }
             .launchIn(viewModelScope)
     }
 
@@ -237,6 +249,18 @@ class SettingsViewModel @Inject constructor(
 
     fun setHapticEnabled(v: Boolean) {
         viewModelScope.launch { settingsRepository.setHapticEnabled(v) }
+    }
+
+    fun setPrinterTestPassed(v: Boolean) {
+        viewModelScope.launch { settingsRepository.setPrinterTestPassed(v) }
+    }
+
+    fun setPrintCheckoutEnabled(v: Boolean) {
+        viewModelScope.launch { settingsRepository.setPrintCheckoutEnabled(v) }
+    }
+
+    fun setPrintDetailEnabled(v: Boolean) {
+        viewModelScope.launch { settingsRepository.setPrintDetailEnabled(v) }
     }
 
     fun changePin(currentPin: String, newPin: String, confirmPin: String, onResult: (Boolean, String) -> Unit) {

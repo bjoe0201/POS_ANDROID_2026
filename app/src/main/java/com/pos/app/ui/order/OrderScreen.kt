@@ -37,9 +37,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.pos.app.data.db.entity.MenuItemEntity
 import com.pos.app.util.SoundEffects
+import com.pos.app.util.UsbPrinterManager
 import com.pos.app.data.db.entity.OrderItemEntity
 import com.pos.app.data.db.entity.TableEntity
 import com.pos.app.ui.theme.LocalPosColors
@@ -57,6 +59,8 @@ fun OrderScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val t = LocalPosColors.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var showCheckout by remember { mutableStateOf(false) }
     var showCancel by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
@@ -102,13 +106,20 @@ fun OrderScreen(
             selectedDate = uiState.selectedDate,
             onRemarkChange = { viewModel.updateRemark(it) },
             onConfirm = {
-                val tName = uiState.selectedTable?.tableName
+                val tName = uiState.selectedTable?.tableName ?: ""
                 val tTotal = uiState.total
+                val tItems = uiState.orderItems.toList()
+                val tRemark = uiState.remark
+                val shouldPrint = uiState.printCheckoutEnabled
                 viewModel.payOrder {
                     showCheckout = false
-                    lastCheckout = tName?.let { n -> n to tTotal }
-                    // DB 寫入完成後發出完成音效
+                    lastCheckout = tName.takeIf { it.isNotEmpty() }?.let { it to tTotal }
                     SoundEffects.playPaymentSuccess()
+                    if (shouldPrint) {
+                        scope.launch {
+                            UsbPrinterManager.printCheckoutReceipt(context, tName, tItems, tTotal, tRemark)
+                        }
+                    }
                 }
             },
             onDismiss = { showCheckout = false },

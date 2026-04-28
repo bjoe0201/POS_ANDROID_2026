@@ -36,6 +36,9 @@ class SettingsDataStore(private val context: Context) {
         private val QTY_REPEAT_INTERVAL_MS = intPreferencesKey("qty_repeat_interval_ms")
         private val QTY_REPEAT_INITIAL_DELAY_MS = intPreferencesKey("qty_repeat_initial_delay_ms")
         private val HAPTIC_ENABLED = booleanPreferencesKey("haptic_enabled")
+        private val PRINTER_TEST_PASSED    = booleanPreferencesKey("printer_test_passed")
+        private val PRINT_CHECKOUT_ENABLED = booleanPreferencesKey("print_checkout_enabled")
+        private val PRINT_DETAIL_ENABLED   = booleanPreferencesKey("print_detail_enabled")
         private const val DEFAULT_PIN = "1234"
 
         fun hashPin(pin: String): String {
@@ -126,6 +129,15 @@ class SettingsDataStore(private val context: Context) {
 
     val hapticEnabled: Flow<Boolean> = context.dataStore.data.map { it[HAPTIC_ENABLED] ?: true }
     suspend fun setHapticEnabled(v: Boolean) { context.dataStore.edit { it[HAPTIC_ENABLED] = v } }
+
+    // ── 印表機 ──
+    val printerTestPassed: Flow<Boolean>    = context.dataStore.data.map { it[PRINTER_TEST_PASSED] ?: false }
+    val printCheckoutEnabled: Flow<Boolean> = context.dataStore.data.map { it[PRINT_CHECKOUT_ENABLED] ?: false }
+    val printDetailEnabled: Flow<Boolean>   = context.dataStore.data.map { it[PRINT_DETAIL_ENABLED] ?: false }
+
+    suspend fun setPrinterTestPassed(v: Boolean)    { context.dataStore.edit { it[PRINTER_TEST_PASSED] = v } }
+    suspend fun setPrintCheckoutEnabled(v: Boolean) { context.dataStore.edit { it[PRINT_CHECKOUT_ENABLED] = v } }
+    suspend fun setPrintDetailEnabled(v: Boolean)   { context.dataStore.edit { it[PRINT_DETAIL_ENABLED] = v } }
 
     fun verifyPin(inputPin: String, storedHash: String): Boolean = hashPin(inputPin) == storedHash
 }

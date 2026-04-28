@@ -31,8 +31,11 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.runtime.rememberCoroutineScope
 import com.pos.app.ui.theme.LocalPosColors
 import com.pos.app.ui.theme.PosColors
+import com.pos.app.util.UsbPrinterManager
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -455,6 +458,7 @@ fun ReportScreen(
                             owi = owi,
                             sdf = sdf,
                             onDelete = { confirmDeleteId = owi.order.id },
+                            printDetailEnabled = uiState.printDetailEnabled,
                             t = t
                         )
                     }
@@ -495,9 +499,17 @@ private fun StatCard(label: String, value: String, modifier: Modifier = Modifier
 }
 
 @Composable
-private fun OrderSummaryRow(owi: OrderWithItems, sdf: SimpleDateFormat, onDelete: () -> Unit, t: PosColors) {
+private fun OrderSummaryRow(
+    owi: OrderWithItems,
+    sdf: SimpleDateFormat,
+    onDelete: () -> Unit,
+    printDetailEnabled: Boolean,
+    t: PosColors
+) {
     var expanded by remember { mutableStateOf(false) }
     val isDeleted = owi.order.isDeleted
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -555,6 +567,29 @@ private fun OrderSummaryRow(owi: OrderWithItems, sdf: SimpleDateFormat, onDelete
                 ) {
                     Text("${item.name} × ${item.quantity}", fontSize = 13.sp, color = t.textSub)
                     Text("NT${"$"}%.0f".format(item.price * item.quantity), fontSize = 13.sp, color = t.accent, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            if (printDetailEnabled && !isDeleted) {
+                Spacer(Modifier.height(10.dp))
+                val total = owi.items.sumOf { it.price * it.quantity }
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            UsbPrinterManager.printOrderDetail(
+                                context = context,
+                                orderId = owi.order.id,
+                                tableName = owi.order.tableName,
+                                createdAt = owi.order.createdAt,
+                                items = owi.items,
+                                total = total
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, t.accent),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("列印明細", color = t.accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }

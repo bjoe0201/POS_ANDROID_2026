@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- USB Host (for receipt printer) -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+
     <application
         android:name=".POSApplication"
         android:allowBackup="true"
@@ -18,6 +21,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Auto-launch when EPSON printer is connected via USB -->
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/usb_device_filter" />
         </activity>
     </application>
 

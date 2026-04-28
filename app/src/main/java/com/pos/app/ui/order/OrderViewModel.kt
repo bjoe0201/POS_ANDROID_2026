@@ -51,7 +51,8 @@ data class OrderUiState(
     val selectedDate: Long = startOfDay(System.currentTimeMillis()),
     val qtyRepeatIntervalMs: Int = 100,
     val qtyRepeatInitialDelayMs: Int = 1000,
-    val hapticEnabled: Boolean = true
+    val hapticEnabled: Boolean = true,
+    val printCheckoutEnabled: Boolean = false
 ) {
     val total: Double get() = orderItems.sumOf { it.price * it.quantity }
     val itemCount: Int get() = orderItems.sumOf { it.quantity }
@@ -117,6 +118,9 @@ class OrderViewModel @Inject constructor(
             .launchIn(viewModelScope)
         settingsRepository.hapticEnabled
             .onEach { v -> _uiState.update { it.copy(hapticEnabled = v) } }
+            .launchIn(viewModelScope)
+        settingsRepository.printCheckoutEnabled
+            .onEach { v -> _uiState.update { it.copy(printCheckoutEnabled = v) } }
             .launchIn(viewModelScope)
     }
 

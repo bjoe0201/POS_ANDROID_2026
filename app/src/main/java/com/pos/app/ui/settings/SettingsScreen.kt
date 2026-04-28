@@ -8,6 +8,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import com.pos.app.util.UsbPrinterManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -345,6 +348,16 @@ fun SettingsScreen(
                     }
                 }
 
+                // Printer section
+                PrinterSection(
+                    t = t,
+                    snackbarHostState = snackbarHostState,
+                    viewModel = viewModel,
+                    printerTestPassed = uiState.printerTestPassed,
+                    printCheckoutEnabled = uiState.printCheckoutEnabled,
+                    printDetailEnabled = uiState.printDetailEnabled
+                )
+
                 // Backup section
                 SectionCard(title = "資料備份", t = t) {
                     Text("使用備份匯出保存目前資料，或透過備份匯入還原先前備份。", color = t.textMuted, fontSize = 13.sp)
@@ -500,6 +513,140 @@ private fun SectionCard(title: String, t: PosColors, content: @Composable Column
             modifier = Modifier.fillMaxWidth().background(t.card).padding(16.dp),
             content = content
         )
+    }
+}
+
+@Composable
+private fun PrinterSection(
+    t: PosColors,
+    snackbarHostState: SnackbarHostState,
+    viewModel: SettingsViewModel,
+    printerTestPassed: Boolean,
+    printCheckoutEnabled: Boolean,
+    printDetailEnabled: Boolean
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var statusMsg by remember { mutableStateOf("") }
+    var isTesting by remember { mutableStateOf(false) }
+
+    fun runTest() {
+        isTesting = true
+        statusMsg = "正在搜尋 USB 裝置…"
+        scope.launch {
+            val device = withContext(Dispatchers.IO) { UsbPrinterManager.findPrinterDevice(context) }
+            if (device == null) {
+                statusMsg = "未偵測到 USB 裝置，請確認連接與 OTG 設定。"
+                isTesting = false
+                return@launch
+            }
+            statusMsg = "找到裝置：${device.productName ?: device.deviceName}" +
+                    "\nVendorID=0x${"%04X".format(device.vendorId)}  ProductID=0x${"%04X".format(device.productId)}"
+
+            suspend fun doTest() {
+                statusMsg += "\n已有權限，開始列印…"
+                val result = UsbPrinterManager.printTestPage(context, device)
+                if (result.isSuccess) {
+                    statusMsg += "\n列印成功！"
+                    viewModel.setPrinterTestPassed(true)
+                } else {
+                    statusMsg += "\n列印失敗：${result.exceptionOrNull()?.message}"
+                }
+                isTesting = false
+            }
+
+            if (!UsbPrinterManager.hasPermission(context, device)) {
+                statusMsg += "\n正在請求 USB 權限…"
+                UsbPrinterManager.requestPermission(context, device) { granted ->
+                    scope.launch {
+                        if (!granted) { statusMsg += "\n權限被拒絕。"; isTesting = false; return@launch }
+                        doTest()
+                    }
+                }
+            } else {
+                doTest()
+            }
+        }
+    }
+
+    SectionCard(title = "印表機", t = t) {
+        Text("USB 熱感印表機（ESC/POS），請先以 USB 連接 EPSON TM-T70 後點「測試列印」。", color = t.textMuted, fontSize = 13.sp)
+        if (statusMsg.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(t.surface)
+                    .border(1.dp, t.border, RoundedCornerShape(8.dp))
+                    .padding(10.dp)
+            ) {
+                Text(statusMsg, color = t.textSub, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Button(
+            onClick = { runTest() },
+            enabled = !isTesting,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = t.accent),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            if (isTesting) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), color = t.text, strokeWidth = 2.dp)
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(if (isTesting) "測試中…" else "測試列印", fontWeight = FontWeight.SemiBold)
+        }
+
+        // 列印功能開關（僅在測試通過後顯示）
+        if (printerTestPassed) {
+            Spacer(Modifier.height(14.dp))
+            Box(Modifier.height(1.dp).fillMaxWidth().background(t.border))
+            Spacer(Modifier.height(14.dp))
+
+            // 收款結帳列印
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("收款結帳列印", color = t.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text("確認收款後自動列印收據", color = t.textMuted, fontSize = 12.sp)
+                }
+                Switch(
+                    checked = printCheckoutEnabled,
+                    onCheckedChange = { viewModel.setPrintCheckoutEnabled(it) },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = t.accent, checkedTrackColor = t.accentDim2,
+                        uncheckedThumbColor = t.textMuted, uncheckedTrackColor = t.border
+                    )
+                )
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            // 明細列印
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("明細列印", color = t.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text("報表訂單明細新增逐筆列印按鈕", color = t.textMuted, fontSize = 12.sp)
+                }
+                Switch(
+                    checked = printDetailEnabled,
+                    onCheckedChange = { viewModel.setPrintDetailEnabled(it) },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = t.accent, checkedTrackColor = t.accentDim2,
+                        uncheckedThumbColor = t.textMuted, uncheckedTrackColor = t.border
+                    )
+                )
+            }
+        }
     }
 }
 
