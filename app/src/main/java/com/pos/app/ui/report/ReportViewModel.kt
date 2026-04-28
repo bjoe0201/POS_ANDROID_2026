@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pos.app.data.db.entity.OrderEntity
 import com.pos.app.data.db.entity.OrderItemEntity
+
 import com.pos.app.data.repository.OrderRepository
 import com.pos.app.data.repository.SettingsRepository
 import com.pos.app.util.UsbPrinterManager
@@ -44,7 +45,9 @@ data class ReportUiState(
     val message: String? = null,
     val isLoading: Boolean = true,
     val isPrintingReport: Boolean = false,
-    val printDetailEnabled: Boolean = false
+    val printDetailEnabled: Boolean = false,
+    /** 目前尚未結帳（OPEN）的訂單列表（Step 5） */
+    val openOrders: List<OrderEntity> = emptyList()
 )
 
 @HiltViewModel
@@ -63,6 +66,10 @@ class ReportViewModel @Inject constructor(
                 recompute(allOrders, _uiState.value.dateRange, _uiState.value.showDeleted)
             }
         }
+        // Step 5：監聽 OPEN 訂單
+        orderRepository.getAllOpenOrders()
+            .onEach { open -> _uiState.update { it.copy(openOrders = open) } }
+            .launchIn(viewModelScope)
         settingsRepository.printDetailEnabled
             .onEach { v -> _uiState.update { it.copy(printDetailEnabled = v) } }
             .launchIn(viewModelScope)

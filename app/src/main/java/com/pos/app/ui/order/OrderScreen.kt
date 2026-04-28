@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.pos.app.data.db.entity.MenuItemEntity
@@ -61,11 +62,59 @@ fun OrderScreen(
     val t = LocalPosColors.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
     var showCheckout by remember { mutableStateOf(false) }
     var showCancel by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
     var lastCheckout by remember { mutableStateOf<Pair<String, Double>?>(null) }
     val dateFormatter = remember { SimpleDateFormat("MM/dd", Locale.getDefault()) }
+
+    // 補登確認對話框
+    var backfillDateLabel by remember { mutableStateOf("") }
+    var showBackfillConfirm by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        viewModel.backfillConfirmEvent.collect { dateLabel ->
+            backfillDateLabel = dateLabel
+            showBackfillConfirm = true
+        }
+    }
+    if (showBackfillConfirm) {
+        AlertDialog(
+            onDismissRequest = { showBackfillConfirm = false; viewModel.cancelBackfill() },
+            containerColor = t.surface,
+            properties = DialogProperties(dismissOnClickOutside = false, dismissOnBackPress = false),
+            title = { Text("⚠️ 補登模式確認", color = t.error, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "您正在補登 $backfillDateLabel 的訂單。\n\n" +
+                    "此訂單的 createdAt 將記錄為該日期，今日報表將看不到它。\n\n確認繼續補登？",
+                    color = t.textSub
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showBackfillConfirm = false; viewModel.confirmBackfill() },
+                    colors = ButtonDefaults.buttonColors(containerColor = t.accent),
+                    shape = RoundedCornerShape(8.dp)
+                ) { Text("確認補登", fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { showBackfillConfirm = false; viewModel.cancelBackfill() },
+                    border = androidx.compose.foundation.BorderStroke(1.dp, t.border),
+                    shape = RoundedCornerShape(8.dp)
+                ) { Text("取消", color = t.textSub) }
+            }
+        )
+    }
+
+    // 結帳 errorMessage → Snackbar
+    LaunchedEffect(uiState.errorMessage) {
+        uiState.errorMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearErrorMessage()
+        }
+    }
 
     if (showDatePicker) {
         val pickerState = rememberDatePickerState(
@@ -104,6 +153,7 @@ fun OrderScreen(
             total = uiState.total,
             remark = uiState.remark,
             selectedDate = uiState.selectedDate,
+            errorMessage = uiState.errorMessage,
             onRemarkChange = { viewModel.updateRemark(it) },
             onConfirm = {
                 val tName = uiState.selectedTable?.tableName ?: ""
@@ -126,104 +176,137 @@ fun OrderScreen(
                     }
                 }
             },
-            onDismiss = { showCheckout = false },
+            onDismiss = { showCheckout = false; viewModel.clearErrorMessage() },
             t = t
         )
     }
     if (showCancel && uiState.order != null) {
-        AlertDialog(
-            onDismissRequest = { showCancel = false },
-            containerColor = t.surface,
-            title = { Text("取消訂單", color = t.text, fontWeight = FontWeight.Bold) },
-            text = { Text("確定取消 ${uiState.selectedTable?.tableName} 的所有點餐？", color = t.textSub) },
-            confirmButton = { TextButton(onClick = { viewModel.cancelOrder(); showCancel = false }) { Text("確定", color = t.error) } },
-            dismissButton = { TextButton(onClick = { showCancel = false }) { Text("返回", color = t.textSub) } }
+        CancelOrderDialog(
+            tableName = uiState.selectedTable?.tableName ?: "",
+            onConfirm = { viewModel.cancelOrder(); showCancel = false },
+            onDismiss = { showCancel = false },
+            t = t
         )
     }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(t.bg)) {
-        val compact = maxHeight < 900.dp || maxWidth > maxHeight
+    val openCount = uiState.openOrderTotals.count { it.value > 0.0 }
 
-        Column(modifier = Modifier.fillMaxSize()) {
-        // TopBar
-            PosTopBar(title = "記帳點餐", subtitle = "火鍋店 POS", compact = compact, t = t, rightContent = {
-            lastCheckout?.let { (name, amt) ->
-                Text("✓ $name NT${"$"}${amt.toLong()}", color = t.success, fontSize = 12.sp, modifier = Modifier.padding(end = 8.dp))
-            }
-            val todayStart = remember { startOfDay(System.currentTimeMillis()) }
-            val isToday = uiState.selectedDate == todayStart
-            val dateLabel = if (isToday) "今天" else dateFormatter.format(Date(uiState.selectedDate))
-            val dateTint = if (isToday) t.textSub else t.error
-            TextButton(onClick = { showDatePicker = true }) {
-                Text(dateLabel, color = dateTint, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-            }
-        })
+    Scaffold(
+        containerColor = t.bg,
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { paddingValues ->
+        BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(paddingValues).background(t.bg)) {
+            val compact = maxHeight < 900.dp || maxWidth > maxHeight
 
-        // Table selector
-            TableSelectorRow(tables = uiState.tables, selected = uiState.selectedTable, totals = uiState.openOrderTotals, compact = compact, onSelect = { viewModel.selectTable(it) }, t = t)
+            Column(modifier = Modifier.fillMaxSize()) {
+            // TopBar
+                PosTopBar(title = "記帳點餐", subtitle = "火鍋店 POS", compact = compact, openCount = openCount, t = t, rightContent = {
+                lastCheckout?.let { (name, amt) ->
+                    Text("✓ $name NT${"$"}${amt.toLong()}", color = t.success, fontSize = 12.sp, modifier = Modifier.padding(end = 8.dp))
+                }
+                val todayStart = remember { startOfDay(System.currentTimeMillis()) }
+                val isToday = uiState.selectedDate == todayStart
+                val dateLabel = if (isToday) "今天" else dateFormatter.format(Date(uiState.selectedDate))
+                val dateTint = if (isToday) t.textSub else t.error
+                TextButton(onClick = { showDatePicker = true }) {
+                    Text(dateLabel, color = dateTint, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                }
+            })
 
-        // Main area
-            Row(modifier = Modifier.fillMaxSize()) {
-            // Left: categories + menu
-                Column(modifier = Modifier.weight(1.62f).fillMaxHeight()) {
-                // Category chips
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = if (compact) 6.dp else 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.background(t.bg)
+            // 補登模式警示橫條（Step 2）
+            if (uiState.isBackfillMode) {
+                val displayDate = dateFormatter.format(Date(uiState.selectedDate))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(t.error.copy(alpha = 0.13f))
+                        .border(
+                            width = 1.dp,
+                            color = t.error.copy(alpha = 0.35f),
+                        )
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    items(uiState.groups, key = { it.code }) { group ->
-                        PosChip(label = group.name, active = uiState.selectedCategory == group.code, compact = compact, onClick = { viewModel.selectCategory(group.code) }, t = t)
+                    Text(
+                        "⚠️  補登模式：$displayDate　今日報表不計入",
+                        color = t.error,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = { viewModel.resetToToday() }) {
+                        Text("回到今天", color = t.accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
-                Box(modifier = Modifier.height(1.dp).fillMaxWidth().background(t.border))
-                // Menu grid
-                if (uiState.menuItems.isEmpty()) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("此分類目前沒有可用品項", color = t.textMuted, fontSize = 14.sp)
-                    }
-                } else {
-                    LazyVerticalGrid(
-                        columns = GridCells.Adaptive(if (compact) 118.dp else 130.dp),
-                        contentPadding = PaddingValues(if (compact) 8.dp else 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 10.dp),
-                        verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 10.dp),
-                        modifier = Modifier.fillMaxSize()
+            }
+
+            // Table selector
+                TableSelectorRow(tables = uiState.tables, selected = uiState.selectedTable, totals = uiState.openOrderTotals, compact = compact, onSelect = { viewModel.selectTable(it) }, t = t)
+
+            // Main area
+                Row(modifier = Modifier.fillMaxSize()) {
+                // Left: categories + menu
+                    Column(modifier = Modifier.weight(1.62f).fillMaxHeight()) {
+                    // Category chips
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = if (compact) 6.dp else 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.background(t.bg)
                     ) {
-                        items(uiState.menuItems, key = { it.id }) { item ->
-                            MenuCard(
-                                item = item,
-                                qty = viewModel.getQuantityInOrder(item.id),
-                                compact = compact,
-                                repeatIntervalMs = uiState.qtyRepeatIntervalMs,
-                                repeatInitialDelayMs = uiState.qtyRepeatInitialDelayMs,
-                                hapticEnabled = uiState.hapticEnabled,
-                                onAdd = { viewModel.addItem(item) },
-                                onRemove = { viewModel.removeItem(item) },
-                                t = t
-                            )
+                        items(uiState.groups, key = { it.code }) { group ->
+                            PosChip(label = group.name, active = uiState.selectedCategory == group.code, compact = compact, onClick = { viewModel.selectCategory(group.code) }, t = t)
+                        }
+                    }
+                    Box(modifier = Modifier.height(1.dp).fillMaxWidth().background(t.border))
+                    // Menu grid
+                    if (uiState.menuItems.isEmpty()) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("此分類目前沒有可用品項", color = t.textMuted, fontSize = 14.sp)
+                        }
+                    } else {
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(if (compact) 118.dp else 130.dp),
+                            contentPadding = PaddingValues(if (compact) 8.dp else 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 10.dp),
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            items(uiState.menuItems, key = { it.id }) { item ->
+                                MenuCard(
+                                    item = item,
+                                    qty = viewModel.getQuantityInOrder(item.id),
+                                    compact = compact,
+                                    repeatIntervalMs = uiState.qtyRepeatIntervalMs,
+                                    repeatInitialDelayMs = uiState.qtyRepeatInitialDelayMs,
+                                    hapticEnabled = uiState.hapticEnabled,
+                                    onAdd = { viewModel.addItem(item) },
+                                    onRemove = { viewModel.removeItem(item) },
+                                    t = t
+                                )
+                            }
                         }
                     }
                 }
+                // Vertical divider
+                Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(t.border))
+                // Right: order panel
+                Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    OrderPanel(
+                        table = uiState.selectedTable, order = uiState.orderItems, total = uiState.total,
+                        remark = uiState.remark, onRemarkChange = { viewModel.updateRemark(it) },
+                        onDelete = { viewModel.deleteOrderItem(it) }, onCancel = { showCancel = true },
+                        onCheckout = { showCheckout = true }, compact = compact, t = t
+                    )
+                }
             }
-            // Vertical divider
-            Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(t.border))
-            // Right: order panel
-            Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                OrderPanel(
-                    table = uiState.selectedTable, order = uiState.orderItems, total = uiState.total,
-                    remark = uiState.remark, onRemarkChange = { viewModel.updateRemark(it) },
-                    onDelete = { viewModel.deleteOrderItem(it) }, onCancel = { showCancel = true },
-                    onCheckout = { showCheckout = true }, compact = compact, t = t
-                )
             }
-        }
         }
     }
 }
 
 @Composable
-private fun PosTopBar(title: String, subtitle: String, compact: Boolean, t: PosColors, rightContent: @Composable RowScope.() -> Unit) {
+private fun PosTopBar(title: String, subtitle: String, compact: Boolean, openCount: Int = 0, t: PosColors, rightContent: @Composable RowScope.() -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().height(if (compact) 48.dp else 56.dp).background(t.topbar).padding(horizontal = if (compact) 14.dp else 20.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -234,6 +317,23 @@ private fun PosTopBar(title: String, subtitle: String, compact: Boolean, t: PosC
             Column {
                 Text(title, color = t.text, fontWeight = FontWeight.Bold, fontSize = if (compact) 15.sp else 16.sp, letterSpacing = 0.02.sp)
                 Text(subtitle, color = t.textMuted, fontSize = if (compact) 10.sp else 11.sp)
+            }
+            // OPEN 桌數徽章（Step 5）
+            if (openCount > 0) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(t.error.copy(alpha = 0.18f))
+                        .border(1.dp, t.error.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        "🔔 $openCount 桌未結帳",
+                        color = t.error,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically, content = rightContent)
@@ -541,9 +641,13 @@ private fun OrderPanel(table: TableEntity?, order: List<OrderItemEntity>, total:
                 }
                 table?.seats?.let { Text("($it 人桌)", color = t.textMuted, fontSize = 12.sp) }
             }
-            if (order.isNotEmpty()) {
-                TextButton(onClick = onCancel) { Text("取消訂單", color = t.error, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
-            }
+    if (order.isNotEmpty()) {
+                        OutlinedButton(
+                            onClick = onCancel,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, t.border),
+                            shape = RoundedCornerShape(8.dp)
+                        ) { Text("取消訂單", color = t.textSub, fontSize = 11.sp) }
+                    }
         }
         Box(modifier = Modifier.height(1.dp).fillMaxWidth().background(t.border))
 
@@ -610,7 +714,48 @@ private fun OrderPanel(table: TableEntity?, order: List<OrderItemEntity>, total:
 }
 
 @Composable
-private fun CheckoutDialog(tableName: String, orderItems: List<OrderItemEntity>, total: Double, remark: String, selectedDate: Long, onRemarkChange: (String) -> Unit, onConfirm: () -> Unit, onDismiss: () -> Unit, t: PosColors) {
+private fun CancelOrderDialog(tableName: String, onConfirm: () -> Unit, onDismiss: () -> Unit, t: PosColors) {
+    var confirmEnabled by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = t.surface,
+        title = { Text("取消訂單", color = t.error, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("確定取消 $tableName 的全部點餐？", color = t.text, fontWeight = FontWeight.SemiBold)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(t.error.copy(alpha = 0.1f))
+                        .border(1.dp, t.error.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                        .padding(10.dp)
+                ) {
+                    Text("⚠️ 此操作無法復原，訂單將從報表中消失。", color = t.error, fontSize = 13.sp)
+                }
+                LaunchedEffect(Unit) {
+                    delay(500L)
+                    confirmEnabled = true
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                enabled = confirmEnabled,
+                colors = ButtonDefaults.buttonColors(containerColor = t.error, disabledContainerColor = t.border),
+                shape = RoundedCornerShape(8.dp)
+            ) { Text("確定取消訂單", fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("返回", color = t.textSub) }
+        }
+    )
+}
+
+@Composable
+private fun CheckoutDialog(tableName: String, orderItems: List<OrderItemEntity>, total: Double, remark: String, selectedDate: Long, errorMessage: String?, onRemarkChange: (String) -> Unit, onConfirm: () -> Unit, onDismiss: () -> Unit, t: PosColors) {
     val quantityCount = orderItems.sumOf { it.quantity }
     val todayStart = remember { startOfDay(System.currentTimeMillis()) }
     val isToday = selectedDate == todayStart
@@ -619,6 +764,8 @@ private fun CheckoutDialog(tableName: String, orderItems: List<OrderItemEntity>,
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = t.surface,
+        // Step 1：禁止點外部或按返回鍵誤關
+        properties = DialogProperties(dismissOnClickOutside = false, dismissOnBackPress = false),
         title = {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("確認結帳", color = t.text, fontWeight = FontWeight.Bold, fontSize = 17.sp)
@@ -659,6 +806,19 @@ private fun CheckoutDialog(tableName: String, orderItems: List<OrderItemEntity>,
                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = t.accent, unfocusedBorderColor = t.border, focusedTextColor = t.text, unfocusedTextColor = t.text, cursorColor = t.accent),
                     shape = RoundedCornerShape(8.dp)
                 )
+                // Step 3：結帳失敗時在對話框內顯示錯誤
+                if (!errorMessage.isNullOrBlank()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(t.error.copy(alpha = 0.12f))
+                            .border(1.dp, t.error.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                            .padding(10.dp)
+                    ) {
+                        Text("⚠️ $errorMessage", color = t.error, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
             }
         },
         confirmButton = { Button(onClick = onConfirm, colors = ButtonDefaults.buttonColors(containerColor = t.accent), shape = RoundedCornerShape(10.dp)) { Text("✓ 確認收款", fontWeight = FontWeight.Bold) } },

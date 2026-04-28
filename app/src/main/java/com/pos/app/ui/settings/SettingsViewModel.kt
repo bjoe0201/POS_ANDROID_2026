@@ -291,9 +291,11 @@ class SettingsViewModel @Inject constructor(
 
     fun restoreDb(context: Context, uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
+            // Step 6：匯入前自動在私有目錄建立安全備份
+            BackupManager.autoBackupBeforeImport(context, appDatabase)
             BackupManager.importZip(context, uri, appDatabase)
                 .onSuccess { android.os.Process.killProcess(android.os.Process.myPid()) }
-                .onFailure { e -> _uiState.update { it.copy(message = "還原失敗: ${e.message}") } }
+                .onFailure { e -> _uiState.update { it.copy(message = "還原失敗: ${e.message}（安全備份已保留於裝置私有目錄）") } }
         }
     }
 

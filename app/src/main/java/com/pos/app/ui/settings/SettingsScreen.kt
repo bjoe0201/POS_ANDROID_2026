@@ -59,8 +59,32 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { pendingRestoreUri = null },
             containerColor = t.surface,
-            title = { Text("確認備份匯入", color = t.text, fontWeight = FontWeight.Bold) },
-            text = { Text("還原後 App 會自動關閉，重新開啟後生效。\n目前的資料將被備份檔覆蓋，確定繼續？", color = t.textSub) },
+            properties = DialogProperties(dismissOnClickOutside = false, dismissOnBackPress = false),
+            title = { Text("⚠️ 確認匯入備份", color = t.error, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(t.error.copy(alpha = 0.1f))
+                            .border(1.dp, t.error.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                            .padding(12.dp)
+                    ) {
+                        Text(
+                            "匯入備份將完整覆蓋目前所有資料！\n還原後 App 會自動關閉，重新開啟後生效。",
+                            color = t.error,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Text(
+                        "系統將在覆蓋前自動建立安全備份，萬一匯入失敗仍可找回。",
+                        color = t.textSub,
+                        fontSize = 13.sp
+                    )
+                }
+            },
             confirmButton = {
                 Button(
                     onClick = {
@@ -68,8 +92,8 @@ fun SettingsScreen(
                         pendingRestoreUri = null
                         viewModel.restoreDb(context, uri)
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = t.accent)
-                ) { Text("確定還原") }
+                    colors = ButtonDefaults.buttonColors(containerColor = t.error)
+                ) { Text("確定匯入", fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
                 TextButton(onClick = { pendingRestoreUri = null }) { Text("取消", color = t.textSub) }

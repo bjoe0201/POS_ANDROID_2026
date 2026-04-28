@@ -207,6 +207,32 @@ fun ReportScreen(
                 contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // Step 5：OPEN 訂單提示卡
+                if (uiState.openOrders.isNotEmpty()) {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFFFF6B35).copy(alpha = 0.12f))
+                                .border(1.dp, Color(0xFFFF6B35).copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                "🔔  今日仍有 ${uiState.openOrders.size} 桌訂單尚未結帳",
+                                color = Color(0xFFFF6B35),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                uiState.openOrders.joinToString("  ｜  ") { it.tableName },
+                                color = Color(0xFFFF6B35).copy(alpha = 0.85f),
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
                 // Date range selector
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

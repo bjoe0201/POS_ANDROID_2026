@@ -15,6 +15,7 @@ import com.pos.app.data.repository.TableRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -52,7 +53,10 @@ data class OrderUiState(
     val qtyRepeatIntervalMs: Int = 100,
     val qtyRepeatInitialDelayMs: Int = 1000,
     val hapticEnabled: Boolean = true,
-    val printCheckoutEnabled: Boolean = false
+    val printCheckoutEnabled: Boolean = false,
+    val errorMessage: String? = null,
+    /** 補登模式：selectedDate 不是今日 */
+    val isBackfillMode: Boolean = false
 ) {
     val total: Double get() = orderItems.sumOf { it.price * it.quantity }
     val itemCount: Int get() = orderItems.sumOf { it.quantity }
@@ -73,6 +77,16 @@ class OrderViewModel @Inject constructor(
     private var orderObserveJob: Job? = null
     private var menuObserveJob: Job? = null
     private var resetDateJob: Job? = null
+
+    /** 補登確認事件：發出補登日期文字，UI 訂閱後顯示確認對話框 */
+    private val _backfillConfirmChannel = Channel<String>(Channel.CONFLATED)
+    val backfillConfirmEvent: kotlinx.coroutines.flow.Flow<String> =
+        _backfillConfirmChannel.receiveAsFlow()
+
+    /** 是否已對目前 selectedDate 的補登進行過確認 */
+    private var backfillConfirmed = false
+    /** 暫存等待確認的品項 */
+    private var pendingAddItem: MenuItemEntity? = null
 
     companion object {
         private const val DATE_RESET_DELAY_MS = 3 * 60 * 1000L // 3 分鐘
@@ -151,16 +165,23 @@ class OrderViewModel @Inject constructor(
 
     fun updateSelectedDate(dateMillis: Long) {
         val newDate = startOfDay(dateMillis)
-        _uiState.update { it.copy(selectedDate = newDate) }
         val todayStart = startOfDay(System.currentTimeMillis())
-        if (newDate != todayStart) startResetDateTimer() else cancelResetDateTimer()
+        _uiState.update { it.copy(selectedDate = newDate, isBackfillMode = newDate != todayStart) }
+        if (newDate != todayStart) {
+            backfillConfirmed = false   // 換日期後需重新確認
+            startResetDateTimer()
+        } else {
+            cancelResetDateTimer()
+        }
     }
 
     private fun startResetDateTimer() {
         resetDateJob?.cancel()
         resetDateJob = viewModelScope.launch {
             delay(DATE_RESET_DELAY_MS)
-            _uiState.update { it.copy(selectedDate = startOfDay(System.currentTimeMillis())) }
+            val todayStart = startOfDay(System.currentTimeMillis())
+            _uiState.update { it.copy(selectedDate = todayStart, isBackfillMode = false) }
+            backfillConfirmed = false
             resetDateJob = null
         }
     }
@@ -177,11 +198,22 @@ class OrderViewModel @Inject constructor(
     fun addItem(menuItem: MenuItemEntity) {
         val table = _uiState.value.selectedTable ?: return
         touchResetDateTimer()
-        viewModelScope.launch {
-            val todayStart = startOfDay(System.currentTimeMillis())
-            val selectedDate = _uiState.value.selectedDate
-            val createdAt = if (selectedDate == todayStart) System.currentTimeMillis() else selectedDate
 
+        val todayStart = startOfDay(System.currentTimeMillis())
+        val selectedDate = _uiState.value.selectedDate
+
+        // 補登模式：第一次新增品項前需要使用者確認
+        if (selectedDate != todayStart && !backfillConfirmed) {
+            pendingAddItem = menuItem
+            val dateFmt = java.text.SimpleDateFormat("MM/dd", java.util.Locale.getDefault())
+            viewModelScope.launch {
+                _backfillConfirmChannel.send(dateFmt.format(java.util.Date(selectedDate)))
+            }
+            return
+        }
+
+        viewModelScope.launch {
+            val createdAt = if (selectedDate == todayStart) System.currentTimeMillis() else selectedDate
             val orderId = _uiState.value.order?.id
                 ?: orderRepository.createOrder(table.id, table.tableName, createdAt)
             orderRepository.addOrUpdateItem(
@@ -194,6 +226,28 @@ class OrderViewModel @Inject constructor(
                 delta = 1
             )
         }
+    }
+
+    /** 使用者在補登確認對話框點「確認繼續」 */
+    fun confirmBackfill() {
+        backfillConfirmed = true
+        val item = pendingAddItem ?: return
+        pendingAddItem = null
+        addItem(item)
+    }
+
+    /** 使用者在補登確認對話框點「取消」 */
+    fun cancelBackfill() {
+        pendingAddItem = null
+    }
+
+    /** 回到今日（供補登橫條「回到今天」按鈕使用） */
+    fun resetToToday() {
+        cancelResetDateTimer()
+        backfillConfirmed = false
+        pendingAddItem = null
+        val todayStart = startOfDay(System.currentTimeMillis())
+        _uiState.update { it.copy(selectedDate = todayStart, isBackfillMode = false) }
     }
 
     fun removeItem(menuItem: MenuItemEntity) {
@@ -224,11 +278,24 @@ class OrderViewModel @Inject constructor(
 
     fun payOrder(onDone: () -> Unit) {
         viewModelScope.launch {
-            val orderId = _uiState.value.order?.id ?: return@launch
-            orderRepository.payOrder(orderId, _uiState.value.remark)
-            _uiState.update { it.copy(remark = "") }
-            onDone()
+            val orderId = _uiState.value.order?.id
+            if (orderId == null) {
+                _uiState.update { it.copy(errorMessage = "無可結帳訂單，請重新選桌後再試") }
+                return@launch
+            }
+            runCatching {
+                orderRepository.payOrder(orderId, _uiState.value.remark)
+            }.onSuccess {
+                _uiState.update { it.copy(remark = "", errorMessage = null) }
+                onDone()
+            }.onFailure { e ->
+                _uiState.update { it.copy(errorMessage = "結帳寫入失敗：${e.message ?: "未知錯誤"}") }
+            }
         }
+    }
+
+    fun clearErrorMessage() {
+        _uiState.update { it.copy(errorMessage = null) }
     }
 
     fun cancelOrder() {

@@ -13,6 +13,45 @@ _尚無未發佈變更。_
 
 ---
 
+## [v1.2.7] - 2026-04-28
+
+**versionCode:** 15
+
+### 🔒 結帳可靠性改善（防止記錄消失）
+
+針對客戶回報「當天記錄不見了」的根本原因進行多項防護。
+
+#### Step 1 — 結帳對話框防誤關
+- `CheckoutDialog` 加入 `DialogProperties(dismissOnClickOutside = false, dismissOnBackPress = false)`。
+- 使用者只能透過「✓ 確認收款」或「返回修改」兩個按鈕離開，無法點外部或按返回鍵意外關閉，徹底避免訂單卡在 OPEN 狀態。
+
+#### Step 2 — 補登過去日期顯著警示
+- `OrderUiState` 新增 `isBackfillMode`；日期切換到非今日時即時設為 `true`。
+- 桌號列上方新增常駐紅色橫條「⚠️ 補登模式：MM/dd　今日報表不計入」並附「回到今天」按鈕，比 TopBar 小紅字更明顯。
+- 第一次以非今日日期新增品項時，`OrderViewModel` 透過 `Channel` 通知 UI 彈出確認對話框「您正在補登 MM/dd 的訂單，確認繼續？」；取消則不加品項；切換日期後需重新確認。
+- `resetToToday()` 供「回到今天」按鈕及 ViewModel 內 3 分鐘計時器共用，確保 `isBackfillMode` 同步重置。
+
+#### Step 3 — `payOrder` 失敗回饋
+- `payOrder` 改為 `runCatching`；`order?.id == null` 或 DAO 例外時設 `errorMessage` 並**不呼叫** `onDone()`，對話框保持開啟。
+- `CheckoutDialog` 底部顯示紅色錯誤框「⚠️ …」；同時透過 `Snackbar` 輔助顯示。
+- 新增 `clearErrorMessage()` 供關閉對話框時清除殘留訊息。
+
+#### Step 4 — 降低「取消訂單」誤觸
+- `OrderPanel` 的「取消訂單」由紅色 `TextButton` 改為灰色邊框 `OutlinedButton`，視覺優先級降低。
+- 新增 `CancelOrderDialog`：確認對話框加入紅框警示「⚠️ 此操作無法復原，訂單將從報表中消失」；確認按鈕文字改為「確定取消訂單」並加 **0.5 秒 delay** 防止快速誤點。
+
+#### Step 5 — OPEN 訂單提示
+- `ReportUiState` 新增 `openOrders: List<OrderEntity>`，持續監聽 `getAllOpenOrders()`。
+- 報表頁頂部新增橙色提示卡「🔔 今日仍有 N 桌訂單尚未結帳」，列出所有桌名，有未結帳訂單才顯示。
+- 記帳頁 TopBar 加紅色徽章「🔔 N 桌未結帳」，由 `openOrderTotals` 計算，即時更新。
+
+#### Step 6 — 匯入備份前自動安全備份
+- `BackupManager` 新增 `autoBackupBeforeImport(context, db)`：匯入前在私有目錄 `files/auto_backup/` 建立 `auto-pre-import-yyyyMMdd-HHmmss.zip`，保留最新 5 份（FIFO 輪替）。
+- `SettingsViewModel.restoreDb` 改為先呼叫 `autoBackupBeforeImport`，匯入失敗時 Snackbar 訊息加上「安全備份已保留於裝置私有目錄」說明。
+- `SettingsScreen` 匯入確認對話框改為 `dismissOnClickOutside = false`，標題改為「⚠️ 確認匯入備份」（紅色），新增紅色警示框「匯入備份將完整覆蓋目前所有資料！」並說明自動安全備份機制；確認按鈕文字改為「確定匯入」。
+
+---
+
 ## [v1.2.6] - 2026-04-28
 
 **versionCode:** 14
@@ -197,6 +236,7 @@ _尚無未發佈變更。_
 
 | 版本 | versionCode | 發行日 | 主題 |
 |------|:----------:|--------|------|
+| v1.2.7 | 15 | 2026-04-28 | 結帳可靠性改善（防止記錄消失）|
 | v1.2.6 | 14 | 2026-04-28 | USB 報表列印 + 大量明細列印確認 |
 | v1.2.5 | 13 | 2026-04-27 | 點餐長按連續加減 + 觸覺回饋設定 |
 | v1.2.4 | 12 | 2026-04-25 | 報表 CSV 匯出 + 排行圓餅圖 |

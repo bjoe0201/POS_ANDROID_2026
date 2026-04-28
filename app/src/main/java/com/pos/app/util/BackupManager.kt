@@ -99,7 +99,29 @@ object BackupManager {
     }
 
     /**
+     * 在私有目錄 files/auto_backup/ 建立 auto-pre-import-yyyyMMdd-HHmmss.zip 安全備份。
+     * 目錄內只保留最新 5 份（FIFO 輪替）。
+     * 回傳備份檔，供呼叫端顯示路徑；失敗時回傳 null。
+     */
+    fun autoBackupBeforeImport(context: Context, db: AppDatabase): File? {
+        return runCatching {
+            val dir = File(context.filesDir, "auto_backup").apply { mkdirs() }
+            val ts = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(Date())
+            val outFile = File(dir, "auto-pre-import-$ts.zip")
+            exportZipToFile(context, outFile, db).getOrThrow()
+            // 只保留最新 5 份（FIFO 輪替）
+            val all = dir.listFiles { f -> f.name.startsWith("auto-pre-import-") && f.name.endsWith(".zip") }
+                ?.sortedBy { it.lastModified() } ?: emptyList()
+            if (all.size > 5) {
+                all.take(all.size - 5).forEach { it.delete() }
+            }
+            outFile
+        }.getOrNull()
+    }
+
+    /**
      * 從 ZIP 還原 SQLite 資料庫。
+     * 匯入前先呼叫 autoBackupBeforeImport 建立安全備份。
      * 策略：先解壓到 temp 目錄確認完整 → 關閉 Room → 覆蓋正式 DB 檔 → 呼叫方負責 kill process。
      */
     fun importZip(context: Context, uri: Uri, db: AppDatabase): Result<Unit> {
