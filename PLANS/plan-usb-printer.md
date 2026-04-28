@@ -21,6 +21,7 @@
 10. [檔案結構](#檔案結構)
 11. [已知問題與限制](#已知問題與限制)
 12. [調整參數方式](#調整參數方式)
+13. [下一階段：報表列印](#下一階段報表列印)
 
 ---
 
@@ -501,3 +502,270 @@ val padBot = 12         // 底部留白
 4. 再次測試列印確認排版無誤後，至設定頁開啟「收款結帳列印 / 明細列印」Switch
 
 修改後需重新 Build + Install 再測試列印。
+
+---
+
+## 下一階段：報表列印
+
+### 目標
+
+在 `ReportScreen` 報表頁的「匯出報表」按鈕左側新增 **「報表列印」** 按鈕，將目前畫面套用篩選條件後的報表內容直接透過 USB 熱感印表機列印。
+
+列印內容應與目前 `ReportViewModel.exportCsv(...)` 的報表邏輯一致，包含：
+
+1. 報表檔頭
+2. 日期區間與產生時間
+3. 總覽：總營業額、總筆數、平均客單
+4. 品項銷售排行
+5. 群組銷售排行
+6. 訂單明細
+
+### UI 規劃
+
+#### 按鈕位置
+
+目前 `ReportScreen` 在日期篩選區塊中提供「匯出報表」：
+
+- 自訂模式：位於「套用」右側
+- 非自訂模式：靠右單獨顯示
+
+新增後排列：
+
+```text
+[報表列印] [匯出報表]
+```
+
+自訂模式建議放在「套用」右側、匯出報表左側：
+
+```text
+[開始日期] [結束日期] [套用] [報表列印] [匯出報表]
+```
+
+非自訂模式建議靠右顯示兩個按鈕：
+
+```text
+                              [報表列印] [匯出報表]
+```
+
+#### 按鈕狀態
+
+| 狀態 | 行為 |
+|------|------|
+| `uiState.orders.isEmpty()` | 停用，避免空報表列印 |
+| `uiState.isLoading == true` | 停用，避免列印未完成計算的資料 |
+| `uiState.isPrintingReport == true` | 停用並顯示「列印中…」 |
+| 找不到 USB 印表機 | Snackbar 顯示「找不到 USB 印表機」 |
+| 未授權 USB | Snackbar 顯示「未取得 USB 權限，請先在設定頁完成測試列印」 |
+| 列印成功 | Snackbar 顯示「報表已送出列印」 |
+
+> 建議「報表列印」按鈕不受 `print_detail_enabled` 控制；`print_detail_enabled` 只控制逐筆「列印明細」按鈕。報表列印屬於報表頁主要動作，按鈕直接顯示即可。
+
+### 資料流規劃
+
+```text
+ReportScreen
+  ↓ 點擊「報表列印」
+ReportViewModel.printCurrentReport(context)
+  ↓ 快照目前 ReportUiState
+  ↓ 檢查是否有資料 / 是否列印中
+UsbPrinterManager.printReport(context, snapshot)
+  ↓ findPrinterDevice()
+  ↓ hasPermission()
+  ↓ buildReportBytes(...)
+  ↓ sendToDevice()
+Snackbar 顯示結果
+```
+
+### 建議新增資料模型
+
+避免 `UsbPrinterManager` 直接依賴整個 UI state，可在 `ui/report` 或 `util` 附近定義列印用快照模型：
+
+```kotlin
+data class ReportPrintSnapshot(
+    val rangeLabel: String,
+    val rangeText: String,
+    val showDeleted: Boolean,
+    val generatedAt: Long,
+    val totalRevenue: Double,
+    val totalOrders: Int,
+    val avgOrderValue: Double,
+    val itemRanking: List<Pair<String, Int>>,
+    val groupRanking: List<GroupSalesStat>,
+    val orders: List<OrderWithItems>
+)
+```
+
+也可先以最小變更方式讓 `ReportViewModel` 組成必要參數後傳入 `UsbPrinterManager.printReport(...)`，但長期建議使用 snapshot，避免列印過程中資料重新 recompute 導致內容不一致。
+
+### `ReportViewModel` 規劃
+
+#### `ReportUiState` 新增欄位
+
+```kotlin
+val isPrintingReport: Boolean = false
+```
+
+#### 新增方法
+
+```kotlin
+fun printCurrentReport(context: Context)
+```
+
+責任：
+
+1. 讀取目前 `_uiState.value` 作為列印快照。
+2. 若無資料，設定 `message = "此期間無資料可列印"`。
+3. 若正在列印，直接 return，避免重複送印。
+4. 設定 `isPrintingReport = true`。
+5. 呼叫 `UsbPrinterManager.printReport(...)`。
+6. 成功時設定 `message = "報表已送出列印"`。
+7. 失敗時設定 `message = "報表列印失敗：..."`。
+8. finally 設定 `isPrintingReport = false`。
+
+### `UsbPrinterManager` API 規劃
+
+新增：
+
+```kotlin
+suspend fun printReport(
+    context: Context,
+    snapshot: ReportPrintSnapshot
+): Result<Unit>
+```
+
+或最小變更版：
+
+```kotlin
+suspend fun printReport(
+    context: Context,
+    rangeLabel: String,
+    rangeText: String,
+    showDeleted: Boolean,
+    totalRevenue: Double,
+    totalOrders: Int,
+    avgOrderValue: Double,
+    itemRanking: List<Pair<String, Int>>,
+    groupRanking: List<GroupSalesStat>,
+    orders: List<OrderWithItems>
+): Result<Unit>
+```
+
+建議實作流程與 `printCheckoutReceipt(...)`、`printOrderDetail(...)` 一致：
+
+```text
+findPrinterDevice(context)
+hasPermission(context, device)
+buildReportBytes(snapshot)
+sendToDevice(context, device, bytes)
+```
+
+### 列印版面規劃
+
+熱感紙寬有限，報表列印應偏向「可讀摘要」，不複製 CSV 的多欄表格格式。
+
+```text
+══════════════════════
+        銷售報表
+══════════════════════
+日期區間
+2026-04-28 ~ 2026-04-28
+含已刪除             否
+產生時間   2026-04-28 22:10
+──────────────────────
+總營業額          NT$800
+總筆數              2 筆
+平均客單          NT$400
+══════════════════════
+品項銷售排行
+1. 西歐否 ×3
+2. 酒桃輝哥 ×2
+3. 很菜 ×2
+──────────────────────
+群組銷售排行
+1. 肉品  5份      NT$500
+2. 飲料  3份      NT$300
+══════════════════════
+訂單明細（2 筆）
+#39  1號桌
+2026-04-28 21:59  NT$800
+  西歐否 ×2       NT$200
+  酒桃輝哥 ×1     NT$300
+──────────────────────
+#38  1號桌
+2026-04-28 21:18  NT$800
+  西歐否 ×1       NT$300
+  很菜 ×2         NT$100
+══════════════════════
+```
+
+#### 內容取捨建議
+
+- 品項排行：沿用目前 `itemRanking.take(10)`。
+- 群組排行：沿用目前 `groupRanking.take(10)`。
+- 訂單明細：列出篩選後所有訂單，但每筆訂單內品項名稱需使用 `clipName(...)` 截斷。
+- 若訂單很多，紙張會很長；第一版先完整列印，後續可再加「只列印摘要 / 列印完整明細」選項。
+
+### 長報表處理
+
+目前 `wrapBitmap(lines)` 會將所有 lines render 成單一 Bitmap。報表可能遠長於收據，建議新增分段列印：
+
+```kotlin
+private fun wrapBitmapChunks(lines: List<RL>, chunkLineCount: Int = 48): ByteArray
+```
+
+策略：
+
+1. 將 `lines` 分段。
+2. 第一段送 `ESC @` 初始化。
+3. 每段各自 `renderBitmap(chunk)` → `toEscPosRaster(bitmap)`。
+4. 段落間送少量 LF。
+5. 最後一段才送 `GS V A` 半切。
+
+好處：
+
+- 避免單一 Bitmap 過高造成記憶體壓力。
+- 避免 `GS v 0` 高度參數過大或傳輸時間過長。
+- 後續也可復用於長訂單或其他列印項目。
+
+### 錯誤處理規劃
+
+| 情境 | 顯示訊息 |
+|------|----------|
+| 無報表資料 | `此期間無資料可列印` |
+| 找不到印表機 | `報表列印失敗：找不到 USB 印表機` |
+| 未取得權限 | `報表列印失敗：未取得 USB 權限，請先在設定頁完成測試列印` |
+| USB 傳輸失敗 | `報表列印失敗：資料傳輸失敗...` |
+| 成功 | `報表已送出列印` |
+
+### 需修改檔案
+
+| 檔案 | 變更 |
+|------|------|
+| `app/src/main/java/com/pos/app/ui/report/ReportViewModel.kt` | 新增 `isPrintingReport`、`printCurrentReport(context)`、報表列印 snapshot 組裝 |
+| `app/src/main/java/com/pos/app/ui/report/ReportScreen.kt` | 在「匯出報表」左側新增「報表列印」按鈕、列印中狀態 UI |
+| `app/src/main/java/com/pos/app/util/UsbPrinterManager.kt` | 新增 `printReport(...)`、`buildReportBytes(...)`、必要時新增分段 bitmap 包裝 |
+| `README.md` | 更新報表功能與印表機功能說明 |
+| `CLAUDE.md` | 更新重要常數 / 報表匯出與列印說明 |
+| `PLANS/plan-usb-printer.md` | 記錄本節規劃與實作結果 |
+
+### 驗證項目
+
+1. `gradlew.bat assembleDebug` 可成功建置。
+2. 無資料期間按鈕停用或顯示「此期間無資料可列印」。
+3. 未接印表機時顯示錯誤 Snackbar。
+4. 未授權 USB 時提示先到設定頁測試列印。
+5. 今日 / 昨天 / 本週 / 本月 / 今年 / 全部 / 自訂區間列印內容與畫面統計一致。
+6. 勾選「已刪除」後，列印內容與畫面一致。
+7. 長報表可完整送印，不發生右側殘字或 app 記憶體錯誤。
+8. 列印完成後可再次點擊列印，不會卡在 `isPrintingReport = true`。
+
+### 建議實作順序
+
+1. 先在 `ReportViewModel` 新增列印狀態與 `printCurrentReport(context)`。
+2. 在 `UsbPrinterManager` 新增最小可用 `printReport(...)`，先輸出總覽 + 排行。
+3. 加入訂單明細區段。
+4. 若測試長報表有風險，再將 `wrapBitmap(...)` 擴充為分段列印。
+5. 在 `ReportScreen` 新增「報表列印」按鈕。
+6. 實機測試版面後微調 `NAME_MAX_VW` 或新增報表專用截斷寬度。
+7. 更新 `README.md`、`CLAUDE.md` 與本文件狀態。
+
