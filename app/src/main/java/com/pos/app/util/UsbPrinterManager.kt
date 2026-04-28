@@ -26,6 +26,40 @@ object UsbPrinterManager {
     private const val ACTION_USB_PERMISSION = "com.pos.app.USB_PERMISSION"
     const val EPSON_VENDOR_ID = 0x04B8  // 1208
 
+    data class ReportPrintSnapshot(
+        val rangeLabel: String,
+        val rangeText: String,
+        val showDeleted: Boolean,
+        val generatedAt: Long,
+        val totalRevenue: Double,
+        val totalOrders: Int,
+        val avgOrderValue: Double,
+        val includeOrderDetails: Boolean,
+        val itemRanking: List<Pair<String, Int>>,
+        val groupRanking: List<ReportGroupLine>,
+        val orders: List<ReportOrderLine>
+    )
+
+    data class ReportGroupLine(
+        val groupName: String,
+        val quantity: Int,
+        val revenue: Double
+    )
+
+    data class ReportOrderLine(
+        val orderId: Long,
+        val tableName: String,
+        val createdAt: Long,
+        val isDeleted: Boolean,
+        val items: List<ReportItemLine>
+    )
+
+    data class ReportItemLine(
+        val name: String,
+        val quantity: Int,
+        val subtotal: Double
+    )
+
     // ── Public API ──────────────────────────────────────────────────────────
 
     /** 找 EPSON 裝置，無則找任何 USB 裝置（fallback）。 */
@@ -108,6 +142,20 @@ object UsbPrinterManager {
             val device = findPrinterDevice(context) ?: error("找不到 USB 印表機")
             if (!hasPermission(context, device)) error("未取得 USB 權限，請先在設定頁完成測試列印")
             sendToDevice(context, device, buildDetailBytes(orderId, tableName, createdAt, items, total))
+        }
+    }
+
+    /**
+     * 列印目前報表（中文 Bitmap 點陣模式）。
+     */
+    suspend fun printReport(
+        context: Context,
+        snapshot: ReportPrintSnapshot
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val device = findPrinterDevice(context) ?: error("找不到 USB 印表機")
+            if (!hasPermission(context, device)) error("未取得 USB 權限，請先在設定頁完成測試列印")
+            sendToDevice(context, device, buildReportBytes(snapshot))
         }
     }
 
@@ -311,6 +359,80 @@ object UsbPrinterManager {
         return wrapBitmap(lines)
     }
 
+    private fun buildReportBytes(snapshot: ReportPrintSnapshot): ByteArray {
+        val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+        val lines = mutableListOf<RL>()
+
+        lines += RL("═".repeat(SEP), align = A.CENTER)
+        lines += RL("銷售報表", align = A.CENTER, bold = true, large = true)
+        lines += RL("═".repeat(SEP), align = A.CENTER)
+        lines += RL("日期區間", right = snapshot.rangeLabel)
+        lines += RL(snapshot.rangeText)
+        lines += RL("含已刪除", right = if (snapshot.showDeleted) "是" else "否")
+        lines += RL("產生時間", right = sdf.format(Date(snapshot.generatedAt)))
+        lines += RL("─".repeat(SEP), align = A.CENTER)
+        lines += RL("總營業額", right = money(snapshot.totalRevenue), bold = true)
+        lines += RL("總筆數", right = "${snapshot.totalOrders} 筆")
+        lines += RL("平均客單", right = money(snapshot.avgOrderValue))
+
+        lines += RL("═".repeat(SEP), align = A.CENTER)
+        lines += RL("品項銷售排行", align = A.CENTER, bold = true)
+        if (snapshot.itemRanking.isEmpty()) {
+            lines += RL("（無資料）", align = A.CENTER)
+        } else {
+            snapshot.itemRanking.take(10).forEachIndexed { idx, (name, qty) ->
+                lines += RL("${idx + 1}. ${clipName(name)}", right = "×$qty")
+            }
+        }
+
+        lines += RL("─".repeat(SEP), align = A.CENTER)
+        lines += RL("群組銷售排行", align = A.CENTER, bold = true)
+        if (snapshot.groupRanking.isEmpty()) {
+            lines += RL("（無資料）", align = A.CENTER)
+        } else {
+            snapshot.groupRanking.take(10).forEachIndexed { idx, group ->
+                lines += RL(
+                    "${idx + 1}. ${clipName(group.groupName)} ${group.quantity}份",
+                    right = money(group.revenue)
+                )
+            }
+        }
+
+        lines += RL("═".repeat(SEP), align = A.CENTER)
+        if (!snapshot.includeOrderDetails) {
+            lines += RL("訂單明細（未列印）", align = A.CENTER, bold = true)
+            lines += RL("總筆數", right = "${snapshot.totalOrders} 筆")
+            lines += RL("已略過明細，避免大量列印", align = A.CENTER)
+        } else {
+            lines += RL("訂單明細（${snapshot.totalOrders} 筆）", align = A.CENTER, bold = true)
+            if (snapshot.orders.isEmpty()) {
+                lines += RL("（無資料）", align = A.CENTER)
+            } else {
+                snapshot.orders.forEachIndexed { idx, order ->
+                    val orderTotal = order.items.sumOf { it.subtotal }
+                    if (idx > 0) lines += RL("─".repeat(SEP), align = A.CENTER)
+                    lines += RL(
+                        "#${order.orderId}  ${clipName(order.tableName)}${if (order.isDeleted) " 已刪除" else ""}",
+                        right = money(orderTotal),
+                        bold = true
+                    )
+                    lines += RL(sdf.format(Date(order.createdAt)))
+                    if (order.items.isEmpty()) {
+                        lines += RL("  （無品項）")
+                    } else {
+                        order.items.forEach { item ->
+                            lines += RL("  ${clipName(item.name)} ×${item.quantity}", right = money(item.subtotal))
+                        }
+                    }
+                }
+            }
+        }
+        lines += RL("═".repeat(SEP), align = A.CENTER)
+        lines += RL.BLANK
+        lines += RL.BLANK
+        return wrapBitmapChunks(lines)
+    }
+
     // ── Bitmap 渲染 ──────────────────────────────────────────────────────────
 
     /**
@@ -370,6 +492,26 @@ object UsbPrinterManager {
         return buf.toByteArray()
     }
 
+    /** 長報表分段渲染，避免單一 Bitmap 過高造成記憶體或傳輸風險。 */
+    private fun wrapBitmapChunks(lines: List<RL>, chunkLineCount: Int = 48): ByteArray {
+        val chunks = lines.chunked(chunkLineCount.coerceAtLeast(1))
+        val buf = mutableListOf<Byte>()
+        fun b(vararg bytes: Int) = bytes.forEach { buf.add(it.toByte()) }
+        b(0x1B, 0x40)                    // ESC @ Init
+        b(0x1B, 0x21, 0x00)
+        b(0x1D, 0x21, 0x00)
+        b(0x1D, 0x42, 0x00)
+        b(0x1B, 0x33, 0x00)              // Raster 行距 0
+        chunks.forEachIndexed { idx, chunk ->
+            val bitmap = renderBitmap(chunk)
+            buf.addAll(toEscPosRaster(bitmap).toList())
+            if (idx != chunks.lastIndex) b(0x0A)
+        }
+        b(0x1B, 0x32)
+        b(0x1D, 0x56, 0x41, 0x10)
+        return buf.toByteArray()
+    }
+
     /** 計算字串視覺寬度：中日韓字元 = 2，其餘 = 1。 */
     private fun visualWidth(s: String): Int {
         var w = 0
@@ -397,6 +539,8 @@ object UsbPrinterManager {
         sb.append('…')
         return sb.toString()
     }
+
+    private fun money(value: Double): String = "NT${"$"}${"%.0f".format(value)}"
 
     private fun renderBitmap(lines: List<RL>): Bitmap {
         val widthPx = PRINT_WIDTH_PX
@@ -438,7 +582,6 @@ object UsbPrinterManager {
         var y = padTop.toFloat()
         lines.forEach { line ->
             val lhPx = lh(line)
-            val baseline = y + normalSz
 
             // 分隔線：直接畫線取代文字，確保完整橫跨
             if (line.text.startsWith("═") || line.text.startsWith("─")) {

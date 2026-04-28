@@ -3,7 +3,7 @@
 > 建立日期：2026-04-28
 > 最後更新：2026-04-28
 > 實作版本：v1.2.5+
-> 狀態：**紙張寬度已校正完成（PRINT_WIDTH_PX = 360）／收據版面強化中**
+> 狀態：**紙張寬度已校正完成（PRINT_WIDTH_PX = 360）／收據、明細、報表列印已實作**
 
 ---
 
@@ -34,6 +34,7 @@
 | **測試列印** | 設定頁手動按下 | 設定 → 印表機 → 測試列印 |
 | **收款結帳列印** | 確認收款後自動觸發 | 設定 → 印表機 → 收款結帳列印（Switch） |
 | **訂單明細列印** | 報表頁逐筆手動觸發 | 設定 → 印表機 → 明細列印（Switch） |
+| **報表列印** | 報表頁手動按下 | 報表 → 報表列印 |
 
 > Switch 開關只在「測試列印通過」後才顯示，確保印表機連線可用。
 
@@ -127,8 +128,8 @@ ui/order/
   OrderScreen.kt           — 確認收款後自動列印
 
 ui/report/
-  ReportViewModel.kt       — 新增 printDetailEnabled state（注入 SettingsRepository）
-  ReportScreen.kt          — OrderSummaryRow 新增列印按鈕
+  ReportViewModel.kt       — 新增 printDetailEnabled / isPrintingReport state、報表列印快照
+  ReportScreen.kt          — OrderSummaryRow 明細列印按鈕、報表列印按鈕
 ```
 
 ### UsbPrinterManager 公開 API
@@ -148,6 +149,7 @@ object UsbPrinterManager {
         createdAt: Long = System.currentTimeMillis() // ← 新增：開單時間
     ): Result<Unit>
     suspend fun printOrderDetail(context, orderId, tableName, createdAt, items, total): Result<Unit>
+    suspend fun printReport(context, snapshot): Result<Unit> // ← 新增：目前篩選報表列印
 }
 ```
 
@@ -371,6 +373,21 @@ OrderSummaryRow（展開後）
                   }
 ```
 
+### 報表頁 — 報表列印
+
+```
+[報表列印] [匯出報表]
+  └── onClick = viewModel.printCurrentReport(context)
+        ├── 無資料 / 載入中 / 列印中 → 不重複送印並顯示提示
+        ├── 若超過 10 筆且日期範圍超過 1 天 → 先詢問是否列印訂單明細
+        ├── 建立 ReportPrintSnapshot（目前篩選條件 + 統計 + 排行 + 訂單明細）
+        └── UsbPrinterManager.printReport(context, snapshot)
+              ├── findPrinterDevice()
+              ├── hasPermission()
+              ├── buildReportBytes(snapshot)
+              └── wrapBitmapChunks(lines) 分段 Bitmap 送印
+```
+
 ---
 
 ## 收據版面
@@ -419,6 +436,43 @@ OrderSummaryRow（展開後）
 ══════════════════════
 ```
 
+### 報表列印（printReport）
+
+列印目前 `ReportScreen` 篩選後的報表內容，包含總覽、排行與訂單明細；長報表以 `wrapBitmapChunks(...)` 分段渲染，避免單張 Bitmap 過高。
+
+防呆規則：若目前報表 **超過 10 筆訂單** 且 **日期範圍超過 1 天**，按下「報表列印」時會先跳出確認視窗，提供：
+
+- `列印明細`：列印總覽 / 排行 / 完整訂單明細。
+- `只印總覽`：列印總覽與排行，訂單明細區塊標示「未列印」。
+- `取消`：不送印。
+
+```
+══════════════════════
+        銷售報表
+══════════════════════
+日期區間             今日
+2026-04-28 ~ 2026-04-28
+含已刪除             否
+產生時間   2026-04-28 22:10
+──────────────────────
+總營業額          NT$800
+總筆數              2 筆
+平均客單          NT$400
+══════════════════════
+品項銷售排行
+1. 西歐否          ×3
+2. 酒桃輝哥        ×2
+──────────────────────
+群組銷售排行
+1. 肉品 5份     NT$500
+══════════════════════
+訂單明細（2 筆）
+#39  1號桌       NT$800
+2026-04-28 21:59
+  西歐否 ×2      NT$200
+══════════════════════
+```
+
 ---
 
 ## 檔案結構
@@ -441,8 +495,8 @@ app/src/main/
         │   ├── OrderViewModel.kt               ← printCheckoutEnabled state
         │   └── OrderScreen.kt                  ← 確認收款後列印
         └── report/
-            ├── ReportViewModel.kt              ← printDetailEnabled（注入 SettingsRepository）
-            └── ReportScreen.kt                 ← OrderSummaryRow 列印按鈕
+            ├── ReportViewModel.kt              ← printDetailEnabled / isPrintingReport、報表列印快照
+            └── ReportScreen.kt                 ← OrderSummaryRow 明細列印按鈕、報表列印按鈕
 ```
 
 ---
@@ -506,6 +560,8 @@ val padBot = 12         // 底部留白
 ---
 
 ## 下一階段：報表列印
+
+> 實作狀態：**已完成**。已新增 `ReportScreen`「報表列印」按鈕、`ReportViewModel.printCurrentReport(context)`、`UsbPrinterManager.printReport(...)` 與長報表分段 Bitmap 列印。
 
 ### 目標
 

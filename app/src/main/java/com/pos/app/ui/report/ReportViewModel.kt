@@ -8,6 +8,7 @@ import com.pos.app.data.db.entity.OrderEntity
 import com.pos.app.data.db.entity.OrderItemEntity
 import com.pos.app.data.repository.OrderRepository
 import com.pos.app.data.repository.SettingsRepository
+import com.pos.app.util.UsbPrinterManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -42,6 +43,7 @@ data class ReportUiState(
     val groupRanking: List<GroupSalesStat> = emptyList(),
     val message: String? = null,
     val isLoading: Boolean = true,
+    val isPrintingReport: Boolean = false,
     val printDetailEnabled: Boolean = false
 )
 
@@ -213,6 +215,106 @@ class ReportViewModel @Inject constructor(
 
     fun clearMessage() = _uiState.update { it.copy(message = null) }
 
+    fun printCurrentReport(context: Context, includeOrderDetails: Boolean = true) {
+        viewModelScope.launch {
+            val state = _uiState.value
+            if (state.isPrintingReport) return@launch
+            if (state.isLoading) {
+                _uiState.update { it.copy(message = "報表資料載入中，請稍候") }
+                return@launch
+            }
+            if (state.orders.isEmpty()) {
+                _uiState.update { it.copy(message = "此期間無資料可列印") }
+                return@launch
+            }
+
+            val snapshot = buildReportPrintSnapshot(state, includeOrderDetails)
+            _uiState.update { it.copy(isPrintingReport = true, message = null) }
+            val result = UsbPrinterManager.printReport(context.applicationContext, snapshot)
+            _uiState.update {
+                it.copy(
+                    isPrintingReport = false,
+                    message = if (result.isSuccess) {
+                        "報表已送出列印"
+                    } else {
+                        "報表列印失敗：${result.exceptionOrNull()?.message ?: "未知錯誤"}"
+                    }
+                )
+            }
+        }
+    }
+
+    fun shouldConfirmReportDetailPrint(): Boolean {
+        val state = _uiState.value
+        return state.orders.size > 10 && isReportRangeOverOneDay(state)
+    }
+
+    private fun isReportRangeOverOneDay(state: ReportUiState): Boolean {
+        if (state.dateRange == DateRange.ALL) return true
+        val (start, end) = resolveDateBounds(state.dateRange, state.customStartDate, state.customEndDate)
+        return startOfDay(start) != startOfDay(end)
+    }
+
+    private fun buildReportPrintSnapshot(
+        state: ReportUiState,
+        includeOrderDetails: Boolean
+    ): UsbPrinterManager.ReportPrintSnapshot {
+        val (rangeLabel, rangeText) = reportRangeText(state)
+        return UsbPrinterManager.ReportPrintSnapshot(
+            rangeLabel = rangeLabel,
+            rangeText = rangeText,
+            showDeleted = state.showDeleted,
+            generatedAt = System.currentTimeMillis(),
+            totalRevenue = state.totalRevenue,
+            totalOrders = state.totalOrders,
+            avgOrderValue = state.avgOrderValue,
+            includeOrderDetails = includeOrderDetails,
+            itemRanking = state.itemRanking,
+            groupRanking = state.groupRanking.map {
+                UsbPrinterManager.ReportGroupLine(
+                    groupName = it.groupName,
+                    quantity = it.quantity,
+                    revenue = it.revenue
+                )
+            },
+            orders = if (includeOrderDetails) state.orders.map { owi ->
+                UsbPrinterManager.ReportOrderLine(
+                    orderId = owi.order.id,
+                    tableName = owi.order.tableName,
+                    createdAt = owi.order.createdAt,
+                    isDeleted = owi.order.isDeleted,
+                    items = owi.items.map { item ->
+                        UsbPrinterManager.ReportItemLine(
+                            name = item.name,
+                            quantity = item.quantity,
+                            subtotal = item.price * item.quantity
+                        )
+                    }
+                )
+            } else emptyList()
+        )
+    }
+
+    private fun reportRangeText(state: ReportUiState): Pair<String, String> {
+        val dateFmt = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+        val rangeLabel = when (state.dateRange) {
+            DateRange.TODAY -> "今日"
+            DateRange.YESTERDAY -> "昨天"
+            DateRange.WEEK -> "本週"
+            DateRange.MONTH -> "本月"
+            DateRange.YEAR -> "今年"
+            DateRange.ALL -> "全部"
+            DateRange.CUSTOM -> "自訂"
+        }
+        val (start, end) = resolveDateBounds(state.dateRange, state.customStartDate, state.customEndDate)
+        val rangeText = if (state.dateRange == DateRange.ALL) {
+            "全部"
+        } else {
+            "${dateFmt.format(java.util.Date(start))} ~ ${dateFmt.format(java.util.Date(end))}"
+        }
+        return rangeLabel to rangeText
+    }
+
     /**
      * 將目前報表畫面上的資料匯出為 CSV（依畫面版面輸出多區段）：
      *   1. 總覽（總營業額、總筆數、平均客單）
@@ -247,18 +349,7 @@ class ReportViewModel @Inject constructor(
 
     private fun buildReportCsv(state: ReportUiState): String {
         val dateTimeFmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
-        val dateFmt = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
-        val rangeLabel = when (state.dateRange) {
-            DateRange.TODAY -> "今日"
-            DateRange.YESTERDAY -> "昨天"
-            DateRange.WEEK -> "本週"
-            DateRange.MONTH -> "本月"
-            DateRange.YEAR -> "今年"
-            DateRange.ALL -> "全部"
-            DateRange.CUSTOM -> "自訂"
-        }
-        val (start, end) = resolveDateBounds(state.dateRange, state.customStartDate, state.customEndDate)
-        val rangeStr = if (state.dateRange == DateRange.ALL) "全部" else "${dateFmt.format(java.util.Date(start))} ~ ${dateFmt.format(java.util.Date(end))}"
+        val (rangeLabel, rangeStr) = reportRangeText(state)
 
         val sb = StringBuilder()
         fun line(vararg cols: Any?) {

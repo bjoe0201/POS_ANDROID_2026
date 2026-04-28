@@ -15,7 +15,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileDownload
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -55,7 +54,16 @@ fun ReportScreen(
     val fileNameSdf = remember { SimpleDateFormat("yyyyMMdd", Locale.getDefault()) }
     var showStartDatePicker by remember { mutableStateOf(false) }
     var showEndDatePicker by remember { mutableStateOf(false) }
+    var showReportDetailPrintDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
+
+    val onReportPrintClick: () -> Unit = {
+        if (viewModel.shouldConfirmReportDetailPrint()) {
+            showReportDetailPrintDialog = true
+        } else {
+            viewModel.printCurrentReport(context, includeOrderDetails = true)
+        }
+    }
 
     val exportCsvLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("text/csv")
@@ -132,6 +140,44 @@ fun ReportScreen(
         )
     }
 
+    if (showReportDetailPrintDialog) {
+        AlertDialog(
+            onDismissRequest = { showReportDetailPrintDialog = false },
+            containerColor = t.surface,
+            title = { Text("列印明細確認", color = t.text, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "目前範圍超過 1 天，且共有 ${uiState.totalOrders} 筆訂單。\n\n列印訂單明細可能會印出很多紙，是否要包含「訂單明細」？",
+                    color = t.textSub
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showReportDetailPrintDialog = false
+                        viewModel.printCurrentReport(context, includeOrderDetails = true)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = t.accent)
+                ) { Text("列印明細") }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { showReportDetailPrintDialog = false }) {
+                        Text("取消", color = t.textSub)
+                    }
+                    TextButton(
+                        onClick = {
+                            showReportDetailPrintDialog = false
+                            viewModel.printCurrentReport(context, includeOrderDetails = false)
+                        }
+                    ) {
+                        Text("只印總覽", color = t.accent)
+                    }
+                }
+            }
+        )
+    }
+
     LaunchedEffect(uiState.message) {
         uiState.message?.let { snackbarHostState.showSnackbar(it); viewModel.clearMessage() }
     }
@@ -198,79 +244,58 @@ fun ReportScreen(
                         }
 
                         if (uiState.dateRange == DateRange.CUSTOM) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                OutlinedButton(
-                                    onClick = { showStartDatePicker = true },
-                                    modifier = Modifier.weight(1f),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, t.border),
-                                    shape = RoundedCornerShape(8.dp)
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        uiState.customStartDate?.let { dateSdf.format(Date(it)) } ?: "開始日期",
-                                        color = t.textSub, fontSize = 13.sp
-                                    )
+                                    OutlinedButton(
+                                        onClick = { showStartDatePicker = true },
+                                        modifier = Modifier.weight(1f),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, t.border),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text(
+                                            uiState.customStartDate?.let { dateSdf.format(Date(it)) } ?: "開始日期",
+                                            color = t.textSub, fontSize = 13.sp
+                                        )
+                                    }
+                                    OutlinedButton(
+                                        onClick = { showEndDatePicker = true },
+                                        modifier = Modifier.weight(1f),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, t.border),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text(
+                                            uiState.customEndDate?.let { dateSdf.format(Date(it)) } ?: "結束日期",
+                                            color = t.textSub, fontSize = 13.sp
+                                        )
+                                    }
+                                    Button(
+                                        onClick = { viewModel.applyCustomDateRange() },
+                                        enabled = uiState.customStartDate != null && uiState.customEndDate != null,
+                                        colors = ButtonDefaults.buttonColors(containerColor = t.accent, disabledContainerColor = t.border),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text("套用", fontSize = 13.sp)
+                                    }
                                 }
-                                OutlinedButton(
-                                    onClick = { showEndDatePicker = true },
-                                    modifier = Modifier.weight(1f),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, t.border),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Text(
-                                        uiState.customEndDate?.let { dateSdf.format(Date(it)) } ?: "結束日期",
-                                        color = t.textSub, fontSize = 13.sp
-                                    )
-                                }
-                                Button(
-                                    onClick = { viewModel.applyCustomDateRange() },
-                                    enabled = uiState.customStartDate != null && uiState.customEndDate != null,
-                                    colors = ButtonDefaults.buttonColors(containerColor = t.accent, disabledContainerColor = t.border),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Text("套用", fontSize = 13.sp)
-                                }
-                                Button(
-                                    onClick = { exportCsvLauncher.launch(suggestedFileName()) },
-                                    enabled = uiState.orders.isNotEmpty(),
-                                    colors = ButtonDefaults.buttonColors(containerColor = t.accent, disabledContainerColor = t.border),
-                                    shape = RoundedCornerShape(8.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.FileDownload,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(Modifier.width(4.dp))
-                                    Text("匯出報表", fontSize = 13.sp)
-                                }
+                                ReportActionButtons(
+                                    uiState = uiState,
+                                    onPrint = onReportPrintClick,
+                                    onExport = { exportCsvLauncher.launch(suggestedFileName()) },
+                                    t = t
+                                )
                             }
                         } else {
                             // 非自訂模式也提供匯出入口
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End
-                            ) {
-                                Button(
-                                    onClick = { exportCsvLauncher.launch(suggestedFileName()) },
-                                    enabled = uiState.orders.isNotEmpty(),
-                                    colors = ButtonDefaults.buttonColors(containerColor = t.accent, disabledContainerColor = t.border),
-                                    shape = RoundedCornerShape(8.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.FileDownload,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(Modifier.width(4.dp))
-                                    Text("匯出報表", fontSize = 13.sp)
-                                }
-                            }
+                            ReportActionButtons(
+                                uiState = uiState,
+                                onPrint = onReportPrintClick,
+                                onExport = { exportCsvLauncher.launch(suggestedFileName()) },
+                                t = t
+                            )
                         }
                     }
                 }
@@ -464,6 +489,46 @@ fun ReportScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ReportActionButtons(
+    uiState: ReportUiState,
+    onPrint: () -> Unit,
+    onExport: () -> Unit,
+    t: PosColors
+) {
+    val actionEnabled = uiState.orders.isNotEmpty() && !uiState.isLoading && !uiState.isPrintingReport
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Button(
+            onClick = onPrint,
+            enabled = actionEnabled,
+            colors = ButtonDefaults.buttonColors(containerColor = t.accent, disabledContainerColor = t.border),
+            shape = RoundedCornerShape(8.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            Text(if (uiState.isPrintingReport) "列印中…" else "報表列印", fontSize = 13.sp)
+        }
+        Button(
+            onClick = onExport,
+            enabled = actionEnabled,
+            colors = ButtonDefaults.buttonColors(containerColor = t.accent, disabledContainerColor = t.border),
+            shape = RoundedCornerShape(8.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            Icon(
+                Icons.Default.FileDownload,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(Modifier.width(4.dp))
+            Text("匯出報表", fontSize = 13.sp)
         }
     }
 }
