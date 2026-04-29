@@ -3,6 +3,7 @@ package com.pos.app.ui.reservation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -14,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -67,8 +69,10 @@ fun ReservationCalendarScreen(
             Spacer(Modifier.width(8.dp))
             Text("訂位管理", color = t.text, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.weight(1f))
 
-            // Prev / YearMonth / Next
+            // Today / Prev / YearMonth / Next
+            val isCurrentMonth = yearMonth == YearMonth.now()
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                MonthNavButton("今天", if (isCurrentMonth) Color(0xFFFDD835) else t.textMuted) { viewModel.goToToday() }
                 MonthNavButton("<", t.accent) { viewModel.prevMonth() }
                 Text(
                     "${yearMonth.year} 年 ${yearMonth.monthValue} 月",
@@ -108,8 +112,24 @@ fun ReservationCalendarScreen(
         }
         val weeks = allCells.chunked(7)
 
+        var swipeDeltaX by remember { mutableFloatStateOf(0f) }
         Column(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 2.dp, vertical = 2.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 2.dp, vertical = 2.dp)
+                .pointerInput(Unit) {
+                    detectHorizontalDragGestures(
+                        onDragStart = { swipeDeltaX = 0f },
+                        onDragEnd = {
+                            if (swipeDeltaX > 200f) viewModel.prevMonth()
+                            else if (swipeDeltaX < -200f) viewModel.nextMonth()
+                        },
+                        onHorizontalDrag = { change, dragAmount ->
+                            change.consume()
+                            swipeDeltaX += dragAmount
+                        }
+                    )
+                },
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             weeks.forEach { week ->
@@ -303,11 +323,13 @@ private fun DayCell(
 private fun MonthNavButton(label: String, color: Color, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .size(32.dp)
+            .height(32.dp)
+            .widthIn(min = 32.dp)
             .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(label, color = color, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = color, fontSize = 14.sp, fontWeight = FontWeight.Bold)
     }
 }

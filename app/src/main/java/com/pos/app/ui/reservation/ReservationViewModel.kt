@@ -67,6 +67,15 @@ class ReservationViewModel @Inject constructor(
     fun prevMonth() { _currentYearMonth.value = _currentYearMonth.value.minusMonths(1) }
     fun nextMonth() { _currentYearMonth.value = _currentYearMonth.value.plusMonths(1) }
 
+    fun goToToday() {
+        val todayYm = YearMonth.now()
+        if (_currentYearMonth.value == todayYm) {
+            _selectedDate.value = LocalDate.now()
+        } else {
+            _currentYearMonth.value = todayYm
+        }
+    }
+
     fun selectDate(date: LocalDate) {
         _selectedDate.value = date
         // Sync month view to selected date's month
