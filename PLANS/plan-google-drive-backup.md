@@ -652,3 +652,122 @@ class GoogleDriveBackupManager @Inject constructor(
 - AppAuth fallback 使用 PKCE（Proof Key for Code Exchange）防止授權碼攔截攻擊
 - `drive.file` scope 確保即使 token 洩漏，也只能存取 App 建立的檔案
 - 所有 HTTP 通訊走 HTTPS
+
+---
+
+## 19. 遠端備份替代方案彙整（2026-04-30 補記）
+
+### 19.1 緣由
+
+第 1～18 節的 Google Drive OAuth 主方案以及曾評估過的 Gmail API（`gmail.send` scope）方案，對店家終端使用者而言仍顯複雜：
+
+- 開發者必須事先在 Google Cloud Console 建立 OAuth Client、登錄 SHA-1、申請 Sensitive Scope 審查
+- 使用者首次設定需要 Google Sign-In + 額外授權同意畫面
+- 維運過程中可能遇到「未驗證的應用程式」警告、token 撤銷、GMS 缺失等問題
+
+因此另外列出五個「設定一次就好、不需要 OAuth 審查」的替代路線，供未來決策時挑選。本節只做方案比較與骨架設計，**尚未排入實作排程**。
+
+### 19.2 候選方案比較
+
+| 編號 | 方案 | 使用者一次性設定 | 客戶端工程量 | 主要限制 |
+|---|---|---|---|---|
+| **A** | **Telegram Bot 推送** | BotFather 建 Bot 取 token → 加入群組或私聊取 chat_id | 極低（單一 HTTPS multipart POST 至 `sendDocument`） | 單檔 ≤ 50 MB；需有 Telegram 帳號 |
+| **B** | **Discord Webhook** | Discord 頻道「整合 → Webhook」複製 URL | 極低（multipart POST 至 webhook URL） | 一般伺服器 8 MB、Nitro 25 MB |
+| **C** | **第三方郵件 API（Resend / Brevo / Mailgun）** | 註冊帳號、貼一組 API key、驗證寄件網域或寄件信箱 | 低（單一 REST 呼叫，附件以 base64 編碼） | Resend 免費約 3,000 封/月；附件 ≤ 25–40 MB |
+| **D** | **Google Apps Script Web App 中繼寄信** | 使用者部署 GAS Web App（以自身 Gmail 為寄件人），複製 URL | 低（POST zip 至 GAS URL） | 客戶端零 OAuth；單檔 ≤ 50 MB；Gmail 100 封/日 |
+| **E** | **Google Drive 自動上傳**（即第 1～18 節主方案） | App 內 Google Sign-In，授權 `drive.file` 範圍 | 中（Drive REST + OAuth） | 需 OAuth 審查；不發信，僅同步至 Drive |
+
+### 19.3 推薦組合
+
+- **最省事** → **B（Discord Webhook）**：貼一個 URL 就完成，無帳號登入。適合老闆已有 Discord 群組。
+- **想用 Email 收備份** → **C（Resend / Brevo）**：一組 API key 寄到任意信箱，不必動 Gmail OAuth。
+- **想保留時間軸式雲端版本** → **E**：搭配 A/B 任一做即時通知最完整。
+- **不想暴露任何金鑰、且已有 Google 帳號** → **D**：金鑰留在 GAS，App 端僅持有 Web App URL。
+
+### 19.4 共通骨架（任選方案展開後一致）
+
+1. **DataStore 新增鍵值**：在 [SettingsDataStore.kt](app/src/main/java/com/pos/app/data/datastore/SettingsDataStore.kt) 新增該方案專屬欄位
+   - A：`telegram_bot_token`、`telegram_chat_id`
+   - B：`discord_webhook_url`
+   - C：`mail_api_provider`、`mail_api_key`、`mail_recipient`、`mail_sender`
+   - D：`gas_webapp_url`、`gas_shared_secret`（可選，作為 `Authorization` header）
+   - E：第 7 節既有設計
+   - 共通：`remote_backup_enabled`、`remote_backup_last_at`、`remote_backup_last_failure_date`
+
+2. **抽象介面**：建立 `app/src/main/java/com/pos/app/util/RemoteBackupSender.kt`
+   ```kotlin
+   interface RemoteBackupSender {
+       val id: String                 // "telegram" / "discord" / "mail" / "gas" / "drive"
+       suspend fun isConfigured(): Boolean
+       suspend fun send(entry: BackupEntry): Result<Unit>
+   }
+   ```
+   每個方案各自實作（`TelegramBackupSender`、`DiscordWebhookBackupSender`、`MailApiBackupSender`、`GasWebAppBackupSender`、`GoogleDriveBackupManager`）。
+
+3. **AutoBackupManager 串接**：在 [AutoBackupManager.kt](app/src/main/java/com/pos/app/util/AutoBackupManager.kt) `performBackupInternal()` 寫檔成功後，迭代啟用中的 `RemoteBackupSender` 呼叫 `send(entry)`；錯誤吞掉只記 log 與 failure date，不影響本機備份。
+
+4. **Settings UI**：於 [SettingsScreen.kt](app/src/main/java/com/pos/app/ui/settings/SettingsScreen.kt) 自動儲存區塊新增「遠端備份」群組
+   - 啟用 Switch
+   - 方案下拉選單（Telegram / Discord / Mail API / GAS / Drive）
+   - 對應方案專屬欄位（token、URL、收件人…）以遮罩顯示且可清除
+   - 「測試傳送」按鈕：送出 1 KB 假 zip 驗證設定
+   - 顯示最近成功時間 / 失敗警示徽章
+
+5. **同步文件**：完成實作時更新 [README.md](README.md)、[CLAUDE.md](CLAUDE.md)、[CHANGELOG.md](CHANGELOG.md)，遞增 [gradle.properties](gradle.properties) 的 `APP_VERSION_CODE` / `APP_VERSION_NAME`。
+
+### 19.5 各方案 API 要點
+
+#### 方案 A：Telegram Bot
+- Endpoint：`POST https://api.telegram.org/bot<TOKEN>/sendDocument`
+- Body：`multipart/form-data`，欄位 `chat_id` + `document`（zip）+ 可選 `caption`
+- 限制：單檔 ≤ 50 MB；無需 OAuth；token 一旦洩漏必須在 BotFather 重新產生
+- App 端僅需 OkHttp 或 `HttpURLConnection`
+
+#### 方案 B：Discord Webhook
+- Endpoint：`POST <webhook_url>` （URL 自帶 token）
+- Body：`multipart/form-data`，`payload_json` + `files[0]`（zip）
+- 限制：一般伺服器附件 8 MB、Nitro 25 MB；URL 即金鑰，需安全保管
+- 適合「只想知道備份存在 + 偶爾下載查看」
+
+#### 方案 C：第三方郵件 API（以 Resend 為例）
+- Endpoint：`POST https://api.resend.com/emails`
+- Header：`Authorization: Bearer <API_KEY>`
+- Body：JSON，含 `from`、`to`、`subject`、`html`、`attachments[].filename` + `attachments[].content`（base64 zip）
+- 寄件網域必須先驗證 SPF / DKIM；個人試用可直接以 Resend 提供的測試寄件網域
+- Brevo / Mailgun 結構類似
+
+#### 方案 D：Google Apps Script Web App
+- 使用者於 [script.google.com](https://script.google.com) 部署一段 `doPost(e)` 程式：
+  ```javascript
+  function doPost(e) {
+    var token = e.parameter.token;
+    if (token !== 'SHARED_SECRET') return ContentService.createTextOutput('forbidden');
+    var blob = Utilities.newBlob(Utilities.base64Decode(e.parameter.zip),
+                                 'application/zip', e.parameter.name);
+    GmailApp.sendEmail('owner@example.com', '[POS] 自動備份 ' + e.parameter.name,
+                       '附件為今日備份', { attachments: [blob] });
+    return ContentService.createTextOutput('ok');
+  }
+  ```
+- 部署為「以我身份執行、任何人可存取」→ 取得 `https://script.google.com/macros/s/.../exec`
+- App 端僅需 POST `token`、`name`、`zip`（base64）三個欄位
+- 客戶端零 OAuth；金鑰留在 GAS 端，較安全
+
+#### 方案 E：Google Drive
+- 詳見第 1–18 節；本節不重複。
+
+### 19.6 安全注意事項
+
+- Bot token、Webhook URL、API key、GAS URL 皆等同「拿到即可濫用」的祕密，UI 必須以遮罩顯示、可清除
+- DataStore 屬於 App 私有目錄，第三方 App 無法直接存取，但 root 過的裝置可能讀取；如有更高需求可改用 `EncryptedSharedPreferences`
+- 所有 HTTP 通訊強制 HTTPS
+- 建議於設定頁標示「請勿將上述金鑰外流」之提示
+
+### 19.7 後續決策
+
+待店家實際使用情境確認後，再從上述 5 個方案挑 1～2 個展開。決策關鍵：
+
+1. 老闆習慣的查看通道（Email 收件匣 / IM 訊息 / 雲端硬碟）
+2. 是否願意註冊第三方服務帳號
+3. 預期備份檔大小（影響 Discord 8 MB 上限是否堪用）
+4. 是否需要保留多日歷史版本（Drive / Email 搜尋 vs Telegram/Discord 訊息流）
