@@ -1,9 +1,9 @@
 # USB 熱感印表機功能設計文件
 
 > 建立日期：2026-04-28
-> 最後更新：2026-04-28
+> 最後更新：2026-04-29
 > 實作版本：v1.2.5+
-> 狀態：**紙張寬度已校正完成（PRINT_WIDTH_PX = 360）／收據、明細、報表列印已實作**
+> 狀態：**紙張寬度已校正完成（PRINT_WIDTH_PX = 360）／收據、明細、報表列印已實作／網路列印調查完成（見末節）**
 
 ---
 
@@ -22,6 +22,7 @@
 11. [已知問題與限制](#已知問題與限制)
 12. [調整參數方式](#調整參數方式)
 13. [下一階段：報表列印](#下一階段報表列印)
+14. [網路列印調查紀錄（2026-04-29）](#網路列印調查紀錄2026-04-29)
 
 ---
 
@@ -824,4 +825,83 @@ private fun wrapBitmapChunks(lines: List<RL>, chunkLineCount: Int = 48): ByteArr
 5. 在 `ReportScreen` 新增「報表列印」按鈕。
 6. 實機測試版面後微調 `NAME_MAX_VW` 或新增報表專用截斷寬度。
 7. 更新 `README.md`、`CLAUDE.md` 與本文件狀態。
+
+---
+
+## 網路列印調查紀錄（2026-04-29）
+
+### 背景
+
+嘗試將 EPSON TM-T70II 接至 **ASUS RT-N14UHP** 路由器的 USB 埠，透過路由器內建的 USB Print Server 功能，讓 Android 以 TCP/IP 網路方式列印，取代 OTG USB 直連。
+
+### 測試環境
+
+| 項目 | 值 |
+|------|----|
+| 印表機 | EPSON TM-T70II |
+| 路由器 | ASUS RT-N14UHP |
+| 路由器 IP | 192.168.1.1 |
+| 測試工具 | Python 3.13（Windows） |
+| 測試腳本 | `test_network_printer.py` ～ `test_network_printer5.py`（已刪除） |
+
+### 測試過程
+
+#### Port 掃描結果
+
+| Port | 狀態 | 說明 |
+|------|------|------|
+| 9100 | **OPEN** | RAW TCP（JetDirect） |
+| 515  | **OPEN** | LPD/LPR |
+| 9101 | closed | — |
+| 9102 | closed | — |
+
+兩個標準列印 port 皆開放，初步看似支援。
+
+#### 測試方法與結果
+
+| 方法 | 協定 | 說明 | 結果 |
+|------|------|------|------|
+| A | RAW TCP 9100 | sendall + shutdown + 等 2s | 送出成功，**無出紙** |
+| B | RAW TCP 9100 | SO_LINGER(3s) | 送出成功，**無出紙** |
+| C | RAW TCP 9100 | 分塊 64B + 每塊 50ms 延遲 | 送出成功，**無出紙** |
+| D | LPD 515 | RFC 1179，queue=`lp`，等 ACK | **ACK timeout，失敗** |
+| E | RAW TCP 9100 | 最小指令（ESC @ + LF×5 + CUT）| 送出成功，**無出紙** |
+| F | RAW TCP 9100 | 持連線 10 秒後才關閉 | 送出成功，**無出紙** |
+| G | LPD 515 | RFC 順序，queue=`LPRServer`，不等 ACK | 送出成功，**無出紙** |
+| H | LPD 515 | Microsoft 順序（ctrl 先於 data），queue=`LPRServer` | 送出成功，**無出紙** |
+| I | RAW TCP 9100 | hold 5s 後關閉 | 送出成功，**無出紙** |
+
+> 方法 G/H 的 queue name `LPRServer` 來自 ASUS 官方 Windows 設定說明（Standard TCP/IP Port，Protocol=LPR，Queue Name=LPRServer）。
+
+#### 根本原因
+
+路由器 Web 後台 → USB Application 頁面顯示：
+
+> **TM-T70II — 未啟用**
+
+ASUS RT-N14UHP 的 USB Print Server 韌體有相容印表機清單。TM-T70II 為 ESC/POS 熱感 POS 印表機，**不在清單內**，路由器 USB 子系統無法初始化此裝置。
+
+- Port 9100 / 515 雖開放，但路由器只接受 TCP 連線，不會將資料轉發給「未啟用」的印表機
+- 協定（RAW TCP / LPR）層面完全正確，問題在更底層的 USB 驅動初始化
+
+### 結論
+
+| 方案 | 結果 |
+|------|------|
+| ASUS RT-N14UHP USB Print Server + TM-T70II | **不可行**，硬體韌體不支援 |
+| USB OTG 直連（現有實作） | **可用，穩定** |
+
+### 後續網路列印方向（待評估）
+
+若日後需要網路列印，有以下替代方案：
+
+| 方案 | 說明 | 難度 |
+|------|------|------|
+| 換購內建網路介面的印表機 | 如 EPSON TM-T82III 乙太網路版，直接暴露 RAW TCP port 9100，免中間裝置 | 低 |
+| 換購獨立 USB Print Server | 如 TP-Link TL-PS110U，支援任意 USB 印表機的 RAW TCP 直送 | 低 |
+| 路由器刷 OpenWrt + p910nd | 刷第三方韌體後安裝 raw printer daemon，可開放標準 port 9100 | 高（有磚機風險） |
+
+**目前決策：維持 USB OTG 直連，網路列印方案留待後續評估。**
+
+網路列印的 Android 端架構設計（`PrinterDispatcher` / `NetworkPrinterManager`）已記錄於 `PLANS/plan-network-printer.md` 備用。
 
