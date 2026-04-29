@@ -1,8 +1,66 @@
 # Google Drive 自動備份功能規劃
 
-> 狀態：規劃中（尚未實作）
+> 狀態：⛔ 擱置（已評估後決定不實作 AccountManager + GoogleAuthUtil 方案）
 > 目標版本：待定
 > 建立日期：2026-04-30
+> 最後更新：2026-04-30
+
+---
+
+## ⛔ 擱置原因（2026-04-30 評估）
+
+### 問題 1：對一般使用者太複雜
+
+原方案（`AccountManager + GoogleAuthUtil`）的技術前置條件對終端使用者（店家）完全不透明：
+
+| 需要誰操作 | 操作內容 | 難度 |
+|-----------|---------|------|
+| **開發者**（一次性） | Google Cloud Console 建立專案、啟用 Drive API、設定 OAuth 同意畫面、建立 Android Client ID、取得 SHA-1 指紋 | 高，需要技術背景 |
+| **開發者** | 下載 `google-services.json` 放入 `app/` 目錄並重新打包 APK | 高 |
+| **一般使用者** | 開啟開關 → 選帳號 → 完成 | 低（才是正確方向） |
+
+即使開發者完成了所有前置設定，若 App 分發給多個店家（不同 Android 裝置、不同 Google 帳號），仍可能遭遇：
+- 裝置沒有 Google Play Services（工業平板常見）
+- `UserRecoverableAuthException` 需要使用者手動補授權，體驗差
+- OAuth 同意畫面未通過 Google 審核，僅限測試帳號可用
+
+### 問題 2：安全性不足
+
+- `GoogleAuthUtil.getToken()` 需要 `GET_ACCOUNTS` 或帳號選擇器，在部分 Android 版本行為不一致
+- OAuth 同意畫面若為「外部」且未發布審核，使用者看到「此 App 未經驗證」的警告，造成信任問題
+- `google-services.json` 雖非機密，但含 API Key，若管理不當可能被濫用
+
+### 問題 3：維護成本高
+
+- Google Play Services API 版本迭代快，`AccountPicker`、`GoogleAuthUtil` 已逐漸被 Credential Manager 取代
+- Drive API OAuth scope 若未通過 Google 安全審查，未來可能被限制
+
+---
+
+## ✅ 建議替代方案（未來評估）
+
+### 方案 A：讓使用者自行用 Google Drive App 備份（零開發）
+- 店家在 Android 設定中開啟「Google 帳戶備份」或使用「Files by Google」手動上傳
+- App 只負責產生本機 ZIP 備份檔（已實作），由使用者自行管理雲端同步
+- **優點**：零開發、無 OAuth 複雜度、安全性由 Google 自身保障
+- **缺點**：需要使用者手動操作
+
+### 方案 B：WebDAV / 自架 NAS 備份
+- 使用者輸入 WebDAV URL + 帳號密碼（例如 Synology NAS、Nextcloud）
+- App 用 OkHttp 上傳 ZIP
+- **優點**：不依賴 Google、可完全掌控
+- **缺點**：需要使用者有自架伺服器
+
+### 方案 C：使用 Google Drive API + 服務帳戶（Server-side Proxy）
+- 建立一個後端 API（例如 Firebase Functions），App 只傳 ZIP 給後端，後端用服務帳戶上傳 Drive
+- **優點**：使用者完全無感、無 OAuth 流程
+- **缺點**：需要後端基礎設施、增加維護複雜度
+
+### 方案 D（推薦）：等待 Android Credential Manager + Drive Authorization 成熟
+- Google 正在推進 Credential Manager + `AuthorizationClient` 整合，未來 Drive 授權流程會更簡單
+- 待 API 穩定後重新評估實作
+
+---
 
 ---
 
