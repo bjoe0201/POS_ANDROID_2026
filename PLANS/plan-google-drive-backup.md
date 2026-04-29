@@ -13,9 +13,11 @@
 ### 使用者故事
 
 1. 使用者在設定頁開啟「Google 雲端備份」開關
-2. 系統檢查是否已有 Google 授權；若無，開啟瀏覽器進行 OAuth 授權
-3. 授權成功後，每次自動備份完成會自動上傳 ZIP 到 Google Drive
-4. 若當天 Google 備份失敗，設定分頁顯示警示徽章 + 設定頁顯示橘色警告區塊
+2. 系統檢查是否已有 Google 授權；若無，啟動 Google 帳號選擇與 OAuth 授權
+3. 使用者可選擇裝置上的任一 Google 帳號，或透過瀏覽器登入其他 Google 帳號；**不得假設一定使用 Android 系統預設帳號**
+4. 授權成功後，App 儲存「已授權帳號識別（accountName/email）+ 授權方式」，並在 UI 顯示目前連線帳號
+5. 每次自動備份完成後，都使用該已授權帳號的 token 上傳 ZIP 到 Google Drive
+6. 若當天 Google 備份失敗，設定分頁顯示警示徽章 + 設定頁顯示橘色警告區塊
 
 ---
 
@@ -37,9 +39,10 @@
 
 4. **建立 OAuth 2.0 Client ID**
    - 憑證 → 建立憑證 → OAuth 用戶端 ID
-   - **應用程式類型選擇「Android」**（若使用 Credential Manager / Google Sign-In）
-   - 或選擇 **「網頁應用程式」**（若使用 AppAuth + Custom Tabs）
-   - 記下 Client ID，程式碼中需要使用
+   - **Credential Manager / Google Sign-In**：通常使用「Android」Client ID，需設定 package name 與 SHA-1 / SHA-256 憑證指紋
+   - **AppAuth + Custom Tabs**：依 Google Cloud Console 與 redirect URI 設定選擇對應的 Android / Native client；redirect URI 必須與 `AndroidManifest.xml` 完全一致
+   - 若同時保留多種登入方案，必須清楚區分各方案使用的 Client ID，避免用 Android Client 啟動 Web flow 或用 Web Client 呼叫 Android Sign-In
+   - 記下 Client ID、redirect URI、scope；程式碼與文件需一致
 
 ---
 
@@ -49,11 +52,18 @@
 
 | 方案 | 優點 | 缺點 | 適用情境 |
 |------|------|------|----------|
-| **Credential Manager（推薦）** | 原生 UI、自動管理 token、Google 官方推薦 | 需要 Google Play Services (GMS) | 一般 Android 平板 |
-| **AppAuth + Custom Tabs** | 不依賴 GMS、任何有瀏覽器的裝置可用 | UX 稍差（跳轉瀏覽器）、需手動管理 token | 無 GMS 的 IoT/工業裝置 |
-| **兩者兼顧** | 最大相容性 | 實作複雜度較高 | 不確定目標裝置 |
+| **AccountManager + GoogleAuthUtil（GMS 裝置主方案）** | 可直接讓使用者從裝置 Google 帳號中挑選；`GoogleAuthUtil.getToken()` 會依指定帳號取得 Drive scope 的短期 access token；可避免誤用系統預設帳號 | 依賴 Google Play Services；不適用無 GMS 裝置；需處理 `UserRecoverableAuthException`、token 失效與帳號被移除 | 已確認 POS 平板有 GMS，且主要使用裝置內 Google 帳號 |
+| **Credential Manager** | 原生帳號選擇 / 身分驗證 UI，Google 官方推薦用於登入身分 | **不等同 Drive OAuth 授權**；取得 Google ID token 不代表可呼叫 Drive API；仍需額外 Authorization / OAuth 流程 | 只需登入身分，或搭配其他授權方案使用 |
+| **Google Sign-In / AuthorizationClient** | GMS 原生體驗，可要求 Drive scope，通常支援帳號選擇 | 依賴 GMS；API 版本差異較大；需確認 access token / scope 授權取得方式 | 有 GMS 且希望使用較新的 Play services 授權 API |
+| **AppAuth + Custom Tabs** | 標準 OAuth 2.0 + PKCE；可登入不在裝置上的 Google 帳號；可保存 `AuthState` 與 refresh token | UX 稍差（跳轉瀏覽器）；需手動管理 token、redirect URI 與 AuthState | 無 GMS 裝置、工業平板、或需要完整標準 OAuth fallback |
+| **兩者兼顧** | 最大相容性 | 實作複雜度較高；需清楚分流 token 儲存與錯誤處理 | 不確定目標裝置是否有 GMS |
 
-**建議**：先確認目標 POS 裝置是否有 GMS 再決定。大多數 Android 平板都有 GMS，選 Credential Manager 即可。
+**修訂建議**：若目標 POS 裝置確定有 Google Play Services，採用 **AccountManager + GoogleAuthUtil + 強制帳號選擇器** 作為第一版主方案；若目標裝置可能沒有 GMS，保留 **AppAuth + Custom Tabs** 作為 fallback。Credential Manager 可用於登入身分，但不可單獨視為 Drive API access token 來源。
+
+> 關於 `setAlwaysShowAccountPicker(true)`：此概念的目標是「每次連線 / 切換帳號時都強制顯示帳號選擇器」，避免自動套用 Android 系統預設帳號。實作時需依實際 API 使用正確寫法：
+> - 使用 `AccountPicker.newChooseAccountIntent(...)` 時，應使用其「always prompt / always show account picker」參數或等效設定，強制彈出帳號選擇畫面。
+> - 若改用 Google Sign-In，只有在所採 SDK 版本確實提供 `setAlwaysShowAccountPicker(true)` 或等效 API 時才使用；不要在不存在的 Builder 上硬寫此方法。
+> - 無論使用哪個 API，授權完成後都必須保存「使用者實際選定的帳號」，後續上傳不可重新猜測預設帳號。
 
 ### 3.2 Drive API 呼叫方式
 
@@ -76,8 +86,12 @@ appauth = "0.11.1"          # OpenID AppAuth（若選 AppAuth 方案）
 okhttp = "4.12.0"           # HTTP client for Drive REST API
 credentialManager = "1.5.0" # （若選 Credential Manager 方案）
 googleId = "1.1.1"          # （若選 Credential Manager 方案）
+playServicesAuth = "21.2.0" # AccountManager / GoogleAuthUtil / Google Sign-In / AuthorizationClient
 
 [libraries]
+# 主方案：AccountManager + GoogleAuthUtil（GMS）
+play-services-auth = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "playServicesAuth" }
+
 # 方案 A：Credential Manager
 androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentialManager" }
 androidx-credentials-play = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentialManager" }
@@ -97,6 +111,9 @@ okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhtt
 ```xml
 <!-- 新增網路權限 -->
 <uses-permission android:name="android.permission.INTERNET" />
+
+<!-- AccountPicker / GoogleAuthUtil 主方案不建議直接列舉帳號；優先透過 Google 帳號選擇器取得使用者明確選定的帳號。 -->
+<!-- 若未來實作確實需要直接讀取裝置帳號，才評估 GET_ACCOUNTS；避免預設加入危險權限。 -->
 
 <!-- 若使用 AppAuth，需新增 redirect activity -->
 <activity
@@ -119,18 +136,18 @@ okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhtt
 
 | 檔案 | 用途 |
 |------|------|
-| `util/GoogleDriveBackupManager.kt` | Google Drive 上傳/管理核心邏輯：OAuth 流程、token 管理、Drive API 呼叫、失敗追蹤 |
+| `util/GoogleDriveBackupManager.kt` | Google Drive 上傳/管理核心邏輯：帳號選擇、`GoogleAuthUtil` token 取得、Drive API 呼叫、失敗追蹤 |
 
-只新增 1 個檔案，保持簡單。OAuth 邏輯與 Drive API 呼叫都封裝在同一個 Manager 中。
+只新增 1 個檔案，保持簡單。Google 帳號授權邏輯與 Drive API 呼叫都封裝在同一個 Manager 中；若後續加入 AppAuth fallback，可在同一 Manager 內用 `authMethod` 分流。
 
 ### 6.2 修改檔案
 
 | 檔案 | 變更內容 |
 |------|----------|
 | `AndroidManifest.xml` | 加 `INTERNET` 權限 + AppAuth redirect activity（若需要） |
-| `gradle/libs.versions.toml` | 加 okhttp、appauth/credentials 版本與 library |
+| `gradle/libs.versions.toml` | 加 okhttp、play-services-auth；appauth/credentials 視 fallback 方案加入 |
 | `app/build.gradle.kts` | 加 implementation 宣告 |
-| `data/datastore/SettingsDataStore.kt` | 加 4 個新 DataStore key（見第 7 節） |
+| `data/datastore/SettingsDataStore.kt` | 加 Google 備份與已授權帳號相關 DataStore key（見第 7 節） |
 | `data/repository/SettingsRepository.kt` | 暴露新 key 的 Flow 與 setter |
 | `util/AutoBackupManager.kt` | 備份成功後呼叫 callback 通知 Google 上傳 |
 | `ui/settings/SettingsViewModel.kt` | 新增 Google 備份狀態欄位與操作方法 |
@@ -150,7 +167,19 @@ okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhtt
 // Google 雲端備份開關
 private val GOOGLE_BACKUP_ENABLED = booleanPreferencesKey("google_backup_enabled")
 
-// OAuth AuthState JSON（含 access token + refresh token + expiry）
+// 主方案（AccountManager + GoogleAuthUtil）不保存 refresh token；只保存使用者選定的帳號。
+private val GOOGLE_ACCOUNT_NAME = stringPreferencesKey("google_account_name") // 通常為 email，例如 user@gmail.com
+
+// UI 顯示用 email；多數情況與 accountName 相同，但保留欄位避免未來不同 provider / API 回傳格式差異
+private val GOOGLE_ACCOUNT_EMAIL = stringPreferencesKey("google_account_email")
+
+// 已授權帳號的穩定識別（若取得得到，例如 Google user id / sub；AccountManager 不一定直接提供，可為 null）
+private val GOOGLE_ACCOUNT_ID = stringPreferencesKey("google_account_id")
+
+// 授權方案標記，例如 "google_auth_util" 或 "appauth"，方便未來 fallback / migration
+private val GOOGLE_AUTH_METHOD = stringPreferencesKey("google_auth_method")
+
+// AppAuth fallback 才需要：OAuth AuthState JSON（含 access token + refresh token + expiry）
 private val GOOGLE_AUTH_STATE = stringPreferencesKey("google_auth_state")
 
 // 最近一次成功上傳的 ISO 時間戳
@@ -159,6 +188,8 @@ private val GOOGLE_LAST_BACKUP_AT = stringPreferencesKey("google_last_backup_at"
 // 最近一次失敗的日期 "yyyy-MM-dd"，用於判斷今日是否需要顯示警告
 private val GOOGLE_LAST_FAILURE_DATE = stringPreferencesKey("google_last_failure_date")
 ```
+
+> 主方案使用 `GoogleAuthUtil.getToken(context, account, scope)` 取得短期 access token；token 過期時重新呼叫 `getToken`，不要長期保存 access token 或 refresh token。若 `getToken` 拋出 `UserRecoverableAuthException`，需啟動 exception 內的 intent 讓使用者補授權。
 
 ---
 
@@ -209,10 +240,11 @@ private val GOOGLE_LAST_FAILURE_DATE = stringPreferencesKey("google_last_failure
 │                                         │
 │ ┌─ Status Box (綠色邊框) ───────────┐   │
 │ │  狀態：已連線                      │   │
+│ │  帳號：backup@example.com          │   │
 │ │  最近上傳：2026-04-30 14:32       │   │
 │ └───────────────────────────────────┘   │
 │                                         │
-│ [取消連線] (OutlinedButton)              │
+│ [切換帳號]  [取消連線]                   │
 └─────────────────────────────────────────┘
 ```
 
@@ -227,11 +259,14 @@ private val GOOGLE_LAST_FAILURE_DATE = stringPreferencesKey("google_last_failure
 │                                         │
 │ ┌─ Warning Box (橘色邊框) ──────────┐   │
 │ │  今日 Google 備份失敗              │   │
+│ │  目前帳號：backup@example.com      │   │
 │ │  請檢查網路連線或重新授權          │   │
-│ │  [重新授權]  [立即上傳]            │   │
+│ │  [重新授權]  [切換帳號]  [立即上傳] │   │
 │ └───────────────────────────────────┘   │
 └─────────────────────────────────────────┘
 ```
+
+> UI 必須顯示目前已授權的 Google 帳號 email，避免店家誤以為備份會上傳到 Android 系統預設帳號。`切換帳號` 必須重新開啟帳號選擇器，而且需強制顯示選擇畫面，不可靜默沿用上一次或預設帳號。
 
 ### 8.2 設定分頁徽章
 
@@ -245,15 +280,33 @@ private val GOOGLE_LAST_FAILURE_DATE = stringPreferencesKey("google_last_failure
 
 ```
 使用者開啟 Switch
-    → 檢查 GOOGLE_AUTH_STATE 是否有效
-    → 有效：顯示「已連線」，結束
-    → 無效/空：顯示「未連線」+ 「連線 Google 帳號」按鈕
+    → 檢查 GOOGLE_ACCOUNT_NAME 是否存在
+    → 存在：顯示「已連線」與帳號 email，下一次上傳時再即時檢查 token / scope
+    → 不存在：顯示「未連線」+ 「連線 Google 帳號」按鈕
         → 使用者點擊按鈕
-        → 啟動 OAuth 流程（Credential Manager 或 AppAuth Custom Tabs）
-        → scope: https://www.googleapis.com/auth/drive.file
-        → 授權成功：儲存 AuthState 到 DataStore，顯示「已連線」
-        → 授權失敗/取消：顯示錯誤 Snackbar，Switch 保持開啟但狀態仍為「未連線」
+        → 啟動 AccountPicker，強制顯示帳號選擇器（不可自動使用系統預設帳號）
+        → 使用者選擇 Google 帳號 accountName/email
+        → 以該帳號呼叫 GoogleAuthUtil.getToken(context, account, "oauth2:https://www.googleapis.com/auth/drive.file")
+            → 成功取得 access token：儲存 accountName/email/authMethod，顯示「已連線」
+            → 拋出 UserRecoverableAuthException：啟動 exception.intent 讓使用者授權 Drive scope
+                → 使用者同意後再次 getToken
+                → 成功：儲存 accountName/email/authMethod，顯示「已連線」
+            → 使用者取消 / 授權失敗：顯示錯誤 Snackbar，Switch 保持開啟但狀態仍為「未連線」
 ```
+
+### 9.1.1 切換帳號流程
+
+```
+使用者點擊「切換帳號」或「重新授權」
+    → 清除目前 GOOGLE_ACCOUNT_NAME / GOOGLE_ACCOUNT_EMAIL / GOOGLE_ACCOUNT_ID / GOOGLE_AUTH_METHOD
+    → 啟動 AccountPicker，強制顯示帳號選擇器
+    → 使用者選擇新帳號
+    → 以新帳號執行 getToken + scope 授權
+    → 成功後覆寫已授權帳號資訊
+    → 下一次自動備份與手動立即上傳都使用新帳號 token
+```
+
+> 即使裝置只有一個 Google 帳號，連線與切換流程仍建議顯示帳號確認畫面，讓使用者明確知道備份目的地帳號。
 
 ### 9.2 自動上傳流程
 
@@ -261,8 +314,12 @@ private val GOOGLE_LAST_FAILURE_DATE = stringPreferencesKey("google_last_failure
 AutoBackupManager.performBackupInternal() 完成
     → 呼叫 GoogleDriveBackupManager.onLocalBackupCompleted(entry)
     → 檢查 google_backup_enabled == true？否 → return
-    → 檢查 AuthState 有效？否 → 記錄失敗日期 → return
-    → Token 過期？嘗試 refresh → 失敗 → 記錄失敗日期 → return
+    → 讀取 GOOGLE_ACCOUNT_NAME；不存在 → 記錄失敗日期 → return
+    → 建立 Account(accountName, "com.google")
+    → 呼叫 GoogleAuthUtil.getToken(context, account, DRIVE_SCOPE)
+        → 成功：使用回傳 access token 呼叫 Drive API
+        → UserRecoverableAuthException：記錄失敗日期，UI 顯示「需重新授權」
+        → GoogleAuthException / IOException：記錄失敗日期，依錯誤顯示網路或授權問題
     → 確保 Drive 上有「火鍋店POS備份」資料夾（不存在就建立）
     → 上傳 ZIP（同名檔案覆蓋）
     → 成功：更新 GOOGLE_LAST_BACKUP_AT，清除 GOOGLE_LAST_FAILURE_DATE
@@ -288,10 +345,12 @@ AutoBackupManager.performBackupInternal() 完成
 | 錯誤情境 | 處理方式 |
 |----------|----------|
 | 無網路 | 靜默跳過，設定 failure date |
-| Token 過期但 refresh 成功 | 透明重試，使用者無感 |
-| Token 過期且 refresh 失敗（已撤銷） | 清除 AuthState，設定 failure date，UI 顯示「未連線」+ 警告 |
+| access token 過期 | 重新呼叫 `GoogleAuthUtil.getToken()` 取得新 token，使用者無感 |
+| `UserRecoverableAuthException`（尚未授權 Drive scope / 授權需更新） | 設定 failure date，UI 顯示「需重新授權」，使用者點擊後啟動 exception intent |
+| `GoogleAuthException`（帳號不存在、授權被撤銷、GMS 問題） | 清除已連線狀態或標記需重新連線，設定 failure date，UI 顯示「未連線」+ 警告 |
 | Drive API 403/404/500 | 設定 failure date，UI 顯示警告 |
 | 上傳逾時 | 設定 failure date，UI 顯示警告 |
+| 裝置 Google 帳號被移除 | 清除 `GOOGLE_ACCOUNT_NAME` / email，設定 failure date，要求重新選擇帳號 |
 
 ### 9.5 失敗提醒機制
 
@@ -308,11 +367,16 @@ AutoBackupManager.performBackupInternal() 完成
 
 ```kotlin
 // 在 SettingsUiState data class 新增：
-val googleBackupEnabled: Boolean = false,
-val googleConnected: Boolean = false,       // AuthState 含有效 refresh token
-val googleLastBackupAt: String? = null,     // 格式化的時間字串
-val googleFailedToday: Boolean = false,     // failure date == today
-val googleUploading: Boolean = false,       // 防止重複點擊
+data class SettingsUiState(
+    val googleBackupEnabled: Boolean = false,
+    val googleConnected: Boolean = false,       // 已保存使用者選定的 Google accountName/email
+    val googleAccountEmail: String? = null,     // UI 顯示目前上傳目的地帳號
+    val googleAuthMethod: String? = null,       // 例如 "google_auth_util" / "appauth"
+    val googleLastBackupAt: String? = null,     // 格式化的時間字串
+    val googleFailedToday: Boolean = false,     // failure date == today
+    val googleUploading: Boolean = false,       // 防止重複點擊
+    val googleNeedsReauth: Boolean = false,     // UserRecoverableAuthException / scope 失效時顯示重新授權
+)
 ```
 
 ---
@@ -321,10 +385,13 @@ val googleUploading: Boolean = false,       // 防止重複點擊
 
 ```kotlin
 fun setGoogleBackupEnabled(enabled: Boolean)  // 切換開關
-fun startGoogleAuth(launcher: ActivityResultLauncher)  // 發起 OAuth
-fun handleGoogleAuthResult(result: ActivityResult)     // 處理 OAuth 回調
-fun disconnectGoogle()                                 // 取消連線（清除 AuthState）
-fun retryGoogleUpload()                                // 手動重試上傳
+fun startGoogleAccountPicker(launcher: ActivityResultLauncher<Intent>) // 發起帳號選擇；需強制顯示 picker
+fun handleGoogleAccountPicked(result: ActivityResult)                  // 保存使用者選定 accountName/email，並嘗試 getToken
+fun handleGoogleRecoverableAuthResult(result: ActivityResult)          // 處理 UserRecoverableAuthException 授權回來後的結果
+fun reauthorizeGoogle(launcher: ActivityResultLauncher<Intent>)        // 對目前帳號重新要求 Drive scope 授權
+fun switchGoogleAccount(launcher: ActivityResultLauncher<Intent>)      // 清除舊帳號後重新開啟 picker
+fun disconnectGoogle()                                                 // 取消連線（清除帳號資訊與 fallback AuthState）
+fun retryGoogleUpload()                                                // 手動重試上傳
 ```
 
 ---
@@ -365,12 +432,14 @@ class GoogleDriveBackupManager @Inject constructor(
         .writeTimeout(120, TimeUnit.SECONDS)  // ZIP 上傳可能較慢
         .build()
 
-    // === OAuth 管理 ===
-    suspend fun buildAuthIntent(): Intent          // 建立 OAuth intent
-    suspend fun handleAuthResponse(intent: Intent) // 處理回調，儲存 AuthState
-    suspend fun getFreshAccessToken(): String?     // 取得有效 token（自動 refresh）
-    fun isConnected(): Boolean                     // 檢查是否有有效 AuthState
-    suspend fun disconnect()                       // 清除所有 token
+    // === Google 帳號 / 授權管理 ===
+    fun buildAccountPickerIntent(alwaysShow: Boolean = true): Intent // 建立帳號選擇 intent；必須強制顯示 picker
+    suspend fun handleAccountPicked(intent: Intent)                  // 儲存 accountName/email，並嘗試取得 Drive scope token
+    suspend fun handleRecoverableAuthResult()                        // 使用者同意 scope 後重試 getToken
+    suspend fun getFreshAccessToken(): String?                       // 以保存的 accountName 即時呼叫 GoogleAuthUtil.getToken
+    fun isConnected(): Boolean                                       // 檢查是否已保存 accountName/email
+    suspend fun disconnect()                                         // 清除帳號資訊、AuthState fallback、狀態旗標
+    suspend fun switchAccount(accountPickerIntent: Intent)           // 重新選擇帳號並覆寫已授權帳號
 
     // === Drive 操作 ===
     override suspend fun onBackupCompleted(entry: BackupEntry) // 自動上傳入口
@@ -381,22 +450,24 @@ class GoogleDriveBackupManager @Inject constructor(
 
     // === 狀態 ===
     private suspend fun recordSuccess()            // 更新 GOOGLE_LAST_BACKUP_AT
-    private suspend fun recordFailure()            // 設定 GOOGLE_LAST_FAILURE_DATE
+    private suspend fun recordFailure(needsReauth: Boolean = false) // 設定 GOOGLE_LAST_FAILURE_DATE / reauth 狀態
 }
 ```
+
+> `GoogleDriveBackupManager` 不應在背景自行呼叫系統預設帳號，也不應用 `AccountManager.getAccountsByType("com.google").first()` 之類的方式猜測帳號。所有 Drive API 呼叫都必須以 `GOOGLE_ACCOUNT_NAME` 指定的帳號取得 token。
 
 ---
 
 ## 14. 實作步驟（建議順序）
 
 ### Phase 1：基礎建設
-1. 新增依賴到 `libs.versions.toml` 和 `app/build.gradle.kts`
-2. `AndroidManifest.xml` 加 `INTERNET` 權限（+ AppAuth redirect activity 若需要）
-3. `SettingsDataStore.kt` 加 4 個新 key + Flow + setter
+1. 新增依賴到 `libs.versions.toml` 和 `app/build.gradle.kts`：主方案至少需要 `play-services-auth`、`okhttp`
+2. `AndroidManifest.xml` 加 `INTERNET` 權限（+ AppAuth redirect activity 若需要 fallback）
+3. `SettingsDataStore.kt` 加 Google 備份、已授權帳號、失敗狀態相關 key + Flow + setter
 4. `SettingsRepository.kt` 加 pass-through
 
 ### Phase 2：Google 核心邏輯
-5. 建立 `GoogleDriveBackupManager.kt`（OAuth + Drive API）
+5. 建立 `GoogleDriveBackupManager.kt`（AccountPicker + GoogleAuthUtil + Drive API）
 6. `AppModule.kt` 提供 singleton
 7. `AutoBackupManager.kt` 加 `BackupCompletionListener` callback
 
@@ -407,12 +478,13 @@ class GoogleDriveBackupManager @Inject constructor(
 
 ### Phase 4：UI
 11. `SettingsScreen.kt` 新增 `GoogleDriveBackupSection`
-12. OAuth result launcher 處理
-13. 設定分頁失敗警示徽章
+12. 加入 AccountPicker result launcher 與 UserRecoverableAuthException 授權 result launcher
+13. UI 顯示目前連線 Google 帳號 email，並提供「切換帳號」「重新授權」「立即上傳」
+14. 設定分頁失敗警示徽章
 
 ### Phase 5：收尾
-14. 更新 `CLAUDE.md` 和 `README.md`
-15. 手動測試完整流程
+15. 更新 `CLAUDE.md` 和 `README.md`
+16. 手動測試完整流程，特別是非系統預設帳號與帳號切換
 
 ---
 
@@ -420,19 +492,93 @@ class GoogleDriveBackupManager @Inject constructor(
 
 ### 手動測試項目
 - [ ] 開啟 Switch → 顯示「未連線」+ 連線按鈕
-- [ ] 點擊連線 → 跳轉瀏覽器 OAuth → 授權成功 → 回到 App → 顯示「已連線」
-- [ ] 觸發自動備份 → 本機備份完成 → Google Drive 出現 ZIP 檔案
+- [ ] 點擊連線 → 強制顯示 Google 帳號選擇器，而不是靜默使用系統預設帳號
+- [ ] 選擇「非系統預設」Google 帳號 → 授權成功 → 回到 App → 顯示「已連線」與該帳號 email
+- [ ] 觸發自動備份 → 本機備份完成 → ZIP 檔案出現在已選定帳號的 Google Drive，而不是系統預設帳號
 - [ ] 同日再次備份 → Drive 上的檔案被覆蓋（不產生重複）
 - [ ] 斷網後觸發備份 → Drive 上傳失敗 → 設定分頁出現徽章 → 設定頁出現橘色警告
 - [ ] 點擊「立即上傳」→ 恢復網路後上傳成功 → 警告消失
 - [ ] 到 Google 帳戶撤銷授權 → 下次備份失敗 → 顯示「未連線」+ 警告
-- [ ] 點擊「重新授權」→ 重新 OAuth → 成功 → 立即上傳
-- [ ] 點擊「取消連線」→ 清除 AuthState → Switch 維持開啟但顯示「未連線」
+- [ ] 點擊「重新授權」→ 啟動 `UserRecoverableAuthException` 對應授權畫面或重新 getToken → 成功 → 立即上傳
+- [ ] 點擊「切換帳號」→ 再次強制顯示帳號選擇器 → 選擇另一個帳號 → 後續上傳改到新帳號 Drive
+- [ ] 從 Android 系統移除已授權 Google 帳號 → 下次備份失敗 → 清除連線狀態並要求重新選擇帳號
+- [ ] 點擊「取消連線」→ 清除 accountName/email/AuthState fallback → Switch 維持開啟但顯示「未連線」
 - [ ] 關閉 Switch → Google 區塊收合，不再觸發上傳
 
 ---
 
-## 16. OAuth Scope 說明
+## 16. Google認證流程說明
+
+### 16.1 核心原則
+
+1. **不使用系統預設帳號假設**  
+   Android 裝置可能登入多個 Google 帳號，店家要備份的帳號不一定是系統預設帳號。App 只認使用者在本 App 內明確選擇並授權的帳號。
+
+2. **每次連線 / 切換帳號都強制顯示帳號選擇器**  
+   採用 `AccountPicker` 或等效 API 時，必須使用「always prompt / always show account picker」設定。Gemini 建議的 `setAlwaysShowAccountPicker(true)` 可視為設計要求；實作時需依實際 SDK API 名稱套用，若該方法不存在則改用 AccountPicker 的等效參數。
+
+3. **保存帳號識別，不保存長期 token**  
+   主方案只保存 `GOOGLE_ACCOUNT_NAME` / `GOOGLE_ACCOUNT_EMAIL` / 可取得時的 `GOOGLE_ACCOUNT_ID`。上傳前以該帳號呼叫 `GoogleAuthUtil.getToken()` 即時取得短期 access token。不要把 access token 當成永久憑證，也不要自行保存 refresh token。
+
+4. **Drive API 永遠使用已授權帳號 token**  
+   上傳、查詢資料夾、覆蓋檔案、刪除舊檔案都必須使用已保存帳號取得的 Bearer token，不可在背景改用 `AccountManager` 第一個帳號或 Google Play services 預設帳號。
+
+### 16.2 首次連線流程
+
+```
+使用者點擊「連線 Google 帳號」
+    → 開啟 AccountPicker（強制顯示）
+    → 使用者選擇帳號 A（可以不是系統預設帳號）
+    → App 以帳號 A 呼叫 GoogleAuthUtil.getToken(DRIVE_SCOPE)
+        → 若需要使用者同意 Drive scope，捕捉 UserRecoverableAuthException 並啟動其 intent
+        → 使用者同意後重新 getToken
+    → 成功後保存帳號 A 的 accountName/email/authMethod
+    → UI 顯示「已連線：帳號 A」
+```
+
+### 16.3 自動備份認證流程
+
+```
+本機自動備份 ZIP 完成
+    → 讀取已保存 accountName/email
+    → 以該 accountName 建立 Account
+    → 呼叫 GoogleAuthUtil.getToken() 取得短期 access token
+    → 使用 Bearer token 呼叫 Drive REST API
+    → 成功：更新最後上傳時間並清除失敗警告
+    → 失敗：依錯誤類型標記今日失敗 / 需重新授權 / 需重新選擇帳號
+```
+
+### 16.4 帳號切換流程
+
+```
+使用者點擊「切換帳號」
+    → 清除舊帳號資訊
+    → 強制顯示 AccountPicker
+    → 使用者選擇帳號 B
+    → 以帳號 B 完成 Drive scope 授權
+    → 保存帳號 B
+    → 後續上傳只使用帳號 B
+```
+
+### 16.5 授權失效與重新授權
+
+| 情境 | App 行為 |
+|------|----------|
+| access token 過期 | 重新呼叫 `GoogleAuthUtil.getToken()` |
+| 尚未同意 Drive scope / scope 需更新 | 捕捉 `UserRecoverableAuthException`，提示使用者點「重新授權」 |
+| 使用者在 Google 帳戶安全頁撤銷授權 | 標記需重新授權；若無法恢復則清除帳號資訊 |
+| Android 系統移除該 Google 帳號 | 清除 `GOOGLE_ACCOUNT_NAME` / email，要求重新選擇帳號 |
+| Google Play Services 不可用或過舊 | 顯示 GMS 錯誤；若目標裝置常見此問題，改走 AppAuth fallback |
+
+### 16.6 與其他方案的關係
+
+- **Credential Manager**：可協助登入身分，但不代表已取得 Drive API access token；不可只靠 ID token 呼叫 Drive。
+- **AppAuth fallback**：若裝置沒有 GMS，改用瀏覽器 OAuth + PKCE；此時才保存 `GOOGLE_AUTH_STATE`，並使用 refresh token 更新 access token。
+- **Google Sign-In / AuthorizationClient**：若未來改用此方案，也必須維持同樣原則：強制帳號選擇、保存使用者選定帳號、Drive API 使用該帳號授權 token。
+
+---
+
+## 17. OAuth Scope 說明
 
 使用 `https://www.googleapis.com/auth/drive.file` 而非完整 Drive 權限：
 - 只能存取 App 自己建立的檔案
@@ -441,9 +587,10 @@ class GoogleDriveBackupManager @Inject constructor(
 
 ---
 
-## 17. 安全考量
+## 18. 安全考量
 
-- OAuth token 存在 DataStore（App 私有目錄），第三方 App 無法存取
-- 使用 PKCE（Proof Key for Code Exchange）防止授權碼攔截攻擊
+- 主方案不長期保存 access token / refresh token；DataStore 只保存已授權帳號識別、授權方式與備份狀態
+- 若使用 AppAuth fallback，`AuthState` 存在 DataStore（App 私有目錄），第三方 App 無法存取
+- AppAuth fallback 使用 PKCE（Proof Key for Code Exchange）防止授權碼攔截攻擊
 - `drive.file` scope 確保即使 token 洩漏，也只能存取 App 建立的檔案
 - 所有 HTTP 通訊走 HTTPS
