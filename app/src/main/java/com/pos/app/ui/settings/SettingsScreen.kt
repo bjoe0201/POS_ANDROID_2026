@@ -1186,13 +1186,15 @@ private val MANUAL_HTML = """
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
+  html { scroll-behavior: smooth; }
+
   body {
     font-family: 'Noto Sans TC', system-ui, sans-serif;
     background: #0d1018;
     color: #dde0e8;
     font-size: 14px;
     line-height: 1.75;
-    padding: 0 0 24px;
+    padding: 0 0 80px;
   }
 
   /* ── Hero Header ── */
@@ -1251,7 +1253,30 @@ private val MANUAL_HTML = """
     color: #aab0cc;
     text-decoration: none;
     display: inline-block;
+    cursor: pointer;
   }
+  a.toc-item:active { background: #2a304a; border-color: #5566aa; color: #ccd4ff; }
+
+  /* ── Back to top ── */
+  .back-to-top {
+    position: fixed;
+    right: 18px;
+    bottom: 20px;
+    width: 44px;
+    height: 44px;
+    background: #e05252;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: #fff;
+    text-decoration: none;
+    box-shadow: 0 3px 12px rgba(224,82,82,0.45);
+    border: 2px solid #ff8080;
+    line-height: 1;
+  }
+  .back-to-top:active { background: #c03838; }
 
   /* ── Section ── */
   .section { padding: 0 16px; }
@@ -1460,7 +1485,7 @@ private val MANUAL_HTML = """
 <body>
 
 <!-- Hero -->
-<div class="hero">
+<div id="top" class="hero">
   <div style="font-size:32px;margin-bottom:6px;">🍲</div>
   <h1>火鍋店 POS 使用說明</h1>
   <div class="subtitle">Android 平板記帳系統操作指引</div>
@@ -1471,22 +1496,22 @@ private val MANUAL_HTML = """
 <div class="toc">
   <div class="toc-title">目錄</div>
   <div class="toc-grid">
-    <span class="toc-item">🔐 登入</span>
-    <span class="toc-item">🛒 記帳點餐</span>
-    <span class="toc-item">📅 訂位管理</span>
-    <span class="toc-item">🥩 菜單管理</span>
-    <span class="toc-item">🪑 桌號設定</span>
-    <span class="toc-item">📊 報表</span>
-    <span class="toc-item">💾 備份</span>
-    <span class="toc-item">⚙️ 設定</span>
-    <span class="toc-item">❓ 常見問題</span>
+    <a href="#sec-login"       class="toc-item">🔐 登入</a>
+    <a href="#sec-order"       class="toc-item">🛒 記帳點餐</a>
+    <a href="#sec-reservation" class="toc-item">📅 訂位管理</a>
+    <a href="#sec-menu"        class="toc-item">🥩 菜單管理</a>
+    <a href="#sec-table"       class="toc-item">🪑 桌號設定</a>
+    <a href="#sec-report"      class="toc-item">📊 報表</a>
+    <a href="#sec-backup"      class="toc-item">💾 備份</a>
+    <a href="#sec-settings"    class="toc-item">⚙️ 設定</a>
+    <a href="#sec-faq"         class="toc-item">❓ 常見問題</a>
   </div>
 </div>
 
 <div class="section">
 
 <!-- ①  登入 -->
-<div class="section-header">
+<div id="sec-login" class="section-header">
   <div class="section-num">1</div>
   <div class="section-icon-lbl">🔐 登入</div>
 </div>
@@ -1501,7 +1526,7 @@ private val MANUAL_HTML = """
 <div class="divider"></div>
 
 <!-- ②  記帳點餐 -->
-<div class="section-header">
+<div id="sec-order" class="section-header">
   <div class="section-num">2</div>
   <div class="section-icon-lbl">🛒 記帳點餐</div>
 </div>
@@ -1540,7 +1565,7 @@ private val MANUAL_HTML = """
 <div class="divider"></div>
 
 <!-- ③  訂位管理 -->
-<div class="section-header">
+<div id="sec-reservation" class="section-header">
   <div class="section-num">3</div>
   <div class="section-icon-lbl">📅 訂位管理</div>
 </div>
@@ -1577,7 +1602,7 @@ private val MANUAL_HTML = """
 <div class="divider"></div>
 
 <!-- ④  菜單管理 -->
-<div class="section-header">
+<div id="sec-menu" class="section-header">
   <div class="section-num">4</div>
   <div class="section-icon-lbl">🥩 菜單管理</div>
 </div>
@@ -1599,7 +1624,7 @@ private val MANUAL_HTML = """
 <div class="divider"></div>
 
 <!-- ⑤  桌號設定 -->
-<div class="section-header">
+<div id="sec-table" class="section-header">
   <div class="section-num">5</div>
   <div class="section-icon-lbl">🪑 桌號設定</div>
 </div>
@@ -1614,7 +1639,7 @@ private val MANUAL_HTML = """
 <div class="divider"></div>
 
 <!-- ⑥  報表 -->
-<div class="section-header">
+<div id="sec-report" class="section-header">
   <div class="section-num">6</div>
   <div class="section-icon-lbl">📊 報表</div>
 </div>
@@ -1664,7 +1689,7 @@ private val MANUAL_HTML = """
 <div class="divider"></div>
 
 <!-- ⑦  備份 -->
-<div class="section-header">
+<div id="sec-backup" class="section-header">
   <div class="section-num">7</div>
   <div class="section-icon-lbl">💾 資料備份</div>
 </div>
@@ -1694,7 +1719,7 @@ private val MANUAL_HTML = """
 <div class="divider"></div>
 
 <!-- ⑧  設定 -->
-<div class="section-header">
+<div id="sec-settings" class="section-header">
   <div class="section-num">8</div>
   <div class="section-icon-lbl">⚙️ 設定</div>
 </div>
@@ -1736,7 +1761,7 @@ private val MANUAL_HTML = """
 <div class="divider"></div>
 
 <!-- ❓  常見問題 -->
-<div class="section-header">
+<div id="sec-faq" class="section-header">
   <div class="section-num">？</div>
   <div class="section-icon-lbl">❓ 常見問題</div>
 </div>
@@ -1784,6 +1809,9 @@ private val MANUAL_HTML = """
 </div><!-- /section -->
 
 <div class="footer">🍲 火鍋店 POS v1.2.8 &nbsp;·&nbsp; Android 10+<br>如需協助請聯繫系統管理員</div>
+
+<!-- Back to top -->
+<a href="#top" class="back-to-top">↑</a>
 
 </body>
 </html>
