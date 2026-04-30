@@ -1185,255 +1185,605 @@ private val MANUAL_HTML = """
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
+
   body {
-    font-family: 'Noto Sans TC', sans-serif;
-    background: #0f1117;
-    color: #e0e0e0;
+    font-family: 'Noto Sans TC', system-ui, sans-serif;
+    background: #0d1018;
+    color: #dde0e8;
     font-size: 14px;
-    line-height: 1.7;
-    padding: 16px;
+    line-height: 1.75;
+    padding: 0 0 24px;
   }
-  h1 { color: #e05252; font-size: 20px; margin-bottom: 6px; }
-  h2 {
-    color: #e05252;
-    font-size: 15px;
-    margin: 20px 0 8px;
-    padding-bottom: 4px;
-    border-bottom: 1px solid #333;
+
+  /* ── Hero Header ── */
+  .hero {
+    background: linear-gradient(135deg, #1a0808 0%, #2a0d0d 60%, #1a1228 100%);
+    padding: 22px 18px 18px;
+    border-bottom: 1px solid #3a1a1a;
+    text-align: center;
   }
-  h3 { color: #ff9a9a; font-size: 13px; margin: 14px 0 4px; }
-  p { margin: 4px 0 8px; color: #c0c0c0; }
-  ul, ol { margin: 4px 0 8px 18px; color: #c0c0c0; }
-  li { margin-bottom: 4px; }
-  .badge {
-    display: inline-block;
-    background: #2a2d3e;
-    border: 1px solid #444;
-    border-radius: 6px;
-    padding: 2px 8px;
+  .hero h1 {
+    font-size: 20px;
+    font-weight: 700;
+    color: #f0f0f0;
+    margin-bottom: 4px;
+    letter-spacing: 0.5px;
+  }
+  .hero .subtitle {
     font-size: 12px;
+    color: #888;
+  }
+  .hero .ver-badge {
+    display: inline-block;
+    background: #e05252;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 10px;
+    border-radius: 20px;
+    margin-top: 8px;
+  }
+
+  /* ── TOC ── */
+  .toc {
+    background: #13161f;
+    border-bottom: 1px solid #252830;
+    padding: 12px 16px;
+  }
+  .toc-title {
+    font-size: 11px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+  .toc-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .toc-item {
+    background: #1e2130;
+    border: 1px solid #2e3248;
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 12px;
+    color: #aab0cc;
+    text-decoration: none;
+    display: inline-block;
+  }
+
+  /* ── Section ── */
+  .section { padding: 0 16px; }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 22px 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #252830;
+  }
+  .section-num {
+    background: #e05252;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .section-icon-lbl {
+    font-size: 15px;
+    font-weight: 700;
+    color: #f0f0f0;
+  }
+
+  /* ── Sub-headings ── */
+  h3 {
+    color: #cc8888;
+    font-size: 13px;
+    font-weight: 600;
+    margin: 14px 0 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  h3::before {
+    content: '';
+    display: inline-block;
+    width: 3px;
+    height: 13px;
+    background: #e05252;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  p { margin: 4px 0 8px; color: #b0b8c8; }
+  ul, ol { margin: 4px 0 10px 20px; color: #b0b8c8; }
+  li { margin-bottom: 5px; }
+  strong { color: #e8e0d0; font-weight: 600; }
+  code {
+    background: #1e2235;
+    border: 1px solid #2e3555;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 12px;
+    color: #c8b4f0;
+    font-family: monospace;
+  }
+
+  /* ── Step flow ── */
+  .steps { list-style: none; margin: 6px 0 10px; padding: 0; }
+  .steps li {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    margin-bottom: 8px;
+    color: #b0b8c8;
+  }
+  .step-num {
+    background: #2a1a1a;
+    border: 1px solid #5a2a2a;
     color: #e05252;
-    margin-right: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    min-width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 2px;
+    flex-shrink: 0;
+  }
+
+  /* ── Cards ── */
+  .tip, .warn, .note, .info {
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin: 8px 0;
+    font-size: 13px;
+    line-height: 1.6;
   }
   .tip {
-    background: #1c2a1c;
+    background: #0f1f14;
+    border: 1px solid #1e4a26;
     border-left: 3px solid #4caf50;
-    border-radius: 4px;
-    padding: 8px 12px;
-    margin: 8px 0;
-    color: #a8d5a2;
-    font-size: 13px;
+    color: #90c89a;
   }
   .warn {
-    background: #2a1c1c;
+    background: #1f0f0f;
+    border: 1px solid #4a1e1e;
     border-left: 3px solid #e05252;
-    border-radius: 4px;
-    padding: 8px 12px;
-    margin: 8px 0;
-    color: #e08080;
-    font-size: 13px;
+    color: #d08888;
   }
   .note {
-    background: #1c1c2a;
-    border-left: 3px solid #5588cc;
-    border-radius: 4px;
-    padding: 8px 12px;
-    margin: 8px 0;
-    color: #88aadd;
+    background: #0f1322;
+    border: 1px solid #1e2a55;
+    border-left: 3px solid #5588ee;
+    color: #8899cc;
+  }
+  .info {
+    background: #191520;
+    border: 1px solid #3a2a55;
+    border-left: 3px solid #aa77ee;
+    color: #bb99ee;
+  }
+
+  /* ── Feature pill tags ── */
+  .tag {
+    display: inline-block;
+    background: #2a1a30;
+    border: 1px solid #6644aa;
+    border-radius: 12px;
+    padding: 1px 9px;
+    font-size: 11px;
+    color: #bb99ee;
+    margin: 0 2px 2px 0;
+    vertical-align: middle;
+  }
+  .tag-new {
+    background: #1a2a15;
+    border-color: #4a8a44;
+    color: #88cc88;
+  }
+
+  /* ── Tables ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0 12px;
+    font-size: 13px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #252830;
+  }
+  th {
+    background: #1a1d2a;
+    color: #e05252;
+    padding: 8px 10px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  td {
+    padding: 7px 10px;
+    border-bottom: 1px solid #1e2130;
+    color: #b0b8c8;
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: #11141e; }
+
+  /* ── Divider ── */
+  .divider {
+    height: 1px;
+    background: linear-gradient(to right, transparent, #2e3248 30%, #2e3248 70%, transparent);
+    margin: 4px 0;
+  }
+
+  /* ── FAQ ── */
+  .faq-item {
+    background: #13161f;
+    border: 1px solid #252830;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+  }
+  .faq-q {
+    color: #e8d0a0;
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 4px;
+  }
+  .faq-a {
+    color: #9099b0;
     font-size: 13px;
   }
-  table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 13px; }
-  th { background: #1e2030; color: #e05252; padding: 6px 8px; text-align: left; }
-  td { padding: 5px 8px; border-bottom: 1px solid #2a2d3e; }
-  hr { border: none; border-top: 1px solid #2a2d3e; margin: 16px 0; }
-  .section-icon { font-size: 18px; margin-right: 6px; }
+
+  /* ── Footer ── */
+  .footer {
+    text-align: center;
+    color: #444;
+    font-size: 11px;
+    padding: 20px 0 8px;
+  }
 </style>
 </head>
 <body>
 
-<h1>🍲 火鍋店 POS 使用說明</h1>
-<p>版本 v1.2.2 &nbsp;·&nbsp; 2026-04-24</p>
+<!-- Hero -->
+<div class="hero">
+  <div style="font-size:32px;margin-bottom:6px;">🍲</div>
+  <h1>火鍋店 POS 使用說明</h1>
+  <div class="subtitle">Android 平板記帳系統操作指引</div>
+  <div class="ver-badge">v1.2.8 &nbsp;·&nbsp; 2026-04-30</div>
+</div>
 
-<hr>
+<!-- TOC -->
+<div class="toc">
+  <div class="toc-title">目錄</div>
+  <div class="toc-grid">
+    <span class="toc-item">🔐 登入</span>
+    <span class="toc-item">🛒 記帳點餐</span>
+    <span class="toc-item">📅 訂位管理</span>
+    <span class="toc-item">🥩 菜單管理</span>
+    <span class="toc-item">🪑 桌號設定</span>
+    <span class="toc-item">📊 報表</span>
+    <span class="toc-item">💾 備份</span>
+    <span class="toc-item">⚙️ 設定</span>
+    <span class="toc-item">❓ 常見問題</span>
+  </div>
+</div>
 
-<h2><span class="section-icon">🔐</span>一、登入</h2>
-<p>啟動後進入 PIN 登入畫面，輸入 4 位數字密碼即可進入主畫面。</p>
+<div class="section">
+
+<!-- ①  登入 -->
+<div class="section-header">
+  <div class="section-num">1</div>
+  <div class="section-icon-lbl">🔐 登入</div>
+</div>
+
+<p>啟動後進入 PIN 碼登入畫面，輸入 <strong>4 位數字密碼</strong>即可進入主畫面。</p>
 <ul>
-  <li>預設密碼：<strong>1234</strong>，首次使用請於設定頁修改。</li>
-  <li>連續輸入錯誤 <strong>3 次</strong>，系統鎖定 <strong>30 秒</strong>。</li>
+  <li>首次使用預設密碼：<strong>1234</strong>，請立即至設定修改。</li>
+  <li>連續輸入錯誤 <strong>3 次</strong>，系統鎖定 <strong>30 秒</strong>後自動解鎖。</li>
 </ul>
-<div class="warn">⚠️ 請務必修改預設密碼，避免資料外洩。</div>
+<div class="warn">⚠️ 請務必修改預設密碼，避免他人隨意存取資料。</div>
 
-<hr>
+<div class="divider"></div>
 
-<h2><span class="section-icon">🛒</span>二、記帳（點餐）</h2>
-<h3>基本流程</h3>
-<ol>
-  <li>畫面上方橫列選擇桌號。</li>
-  <li>中段分類 Tab 篩選菜單群組（鍋底 / 肉類 / 海鮮…）。</li>
-  <li>點擊品項按鈕加入訂單，再次點擊可遞增數量。</li>
-  <li>右側訂單摘要確認後，點擊「結帳」→「✓ 確認收款」完成收款。</li>
-  <li>DB 儲存完成後會播放歡快的完成音效（跟隨系統通知音量）。</li>
+<!-- ②  記帳點餐 -->
+<div class="section-header">
+  <div class="section-num">2</div>
+  <div class="section-icon-lbl">🛒 記帳點餐</div>
+</div>
+
+<h3>基本點餐流程</h3>
+<ol class="steps">
+  <li><span class="step-num">1</span><span>畫面<strong>上方橫列</strong>點選桌號（可左右滑動查看更多桌）。</span></li>
+  <li><span class="step-num">2</span><span>中段<strong>分類 Tab</strong> 切換菜單群組（鍋底 / 肉類 / 海鮮 / 蔬菜 / 飲料 / 其他）。</span></li>
+  <li><span class="step-num">3</span><span><strong>點擊品項卡片</strong>加入訂單；右側即時顯示品項清單與合計金額。</span></li>
+  <li><span class="step-num">4</span><span>確認金額後點「<strong>送出結帳 →</strong>」，跳出明細確認視窗。</span></li>
+  <li><span class="step-num">5</span><span>點「<strong>✓ 確認收款</strong>」完成結帳，系統播放歡快音效。</span></li>
 </ol>
-<h3>補登功能</h3>
-<p>點擊日期可切換至歷史日期補登訂單。</p>
-<div class="tip">💡 3 分鐘無操作，自動切回當天日期。</div>
-<h3>崩潰保護</h3>
-<div class="tip">🛡️ 每加一道菜或結帳都即時寫入 DB 主檔（TRUNCATE journal + synchronous=FULL），即使系統當機或斷電，已記帳的資料不會遺失。</div>
+
+<h3>快速調整數量 <span class="tag tag-new">v1.2.5+</span></h3>
+<ul>
+  <li><strong>單擊</strong>品項卡片上的 <code>＋</code> / <code>－</code>：數量加減 1。</li>
+  <li><strong>長按</strong> <code>＋</code> / <code>－</code> 超過 1 秒：進入<strong>連續計數模式</strong>，放開即停止。</li>
+  <li>按住或單擊時，卡片上方會浮現<strong>數字氣泡</strong>（加入亮黃色 / 減少亮綠色）即時反饋。</li>
+  <li>連續計數速度與長按啟動延遲可於「設定 → 點餐操作」調整。</li>
+</ul>
+<div class="tip">💡 觸覺回饋（震動）預設開啟，可於「設定 → 點餐操作 → 觸覺回饋」關閉。</div>
+
+<h3>補登歷史日期 <span class="tag tag-new">v1.2.7+</span></h3>
+<p>點擊頁面右上角日期可切換至過去日期補登訂單。</p>
+<div class="note">📌 切換至歷史日期時，桌號列上方會出現紅色橫條「⚠️ 補登模式：MM/dd」提醒。3 分鐘無操作自動恢復今天；第一次加入品項也會跳出確認提示。</div>
+
 <h3>注意事項</h3>
 <ul>
-  <li>同一桌號可同時存在多筆「開啟中」訂單。</li>
-  <li>已結帳（PAID）或取消（CANCELLED）的訂單不可再修改。</li>
-  <li>品項名稱與價格為下單時的快照，後續修改菜單不影響舊訂單。</li>
+  <li>同一桌號可同時存在多筆「進行中」訂單。</li>
+  <li>已結帳或已取消的訂單不可再修改。</li>
+  <li>品項名稱與價格為<strong>下單時的快照</strong>，後續修改菜單不影響舊訂單。</li>
+  <li>收款音效音量跟隨系統「通知」音量；靜音模式下不會發聲。</li>
 </ul>
+<div class="tip">🛡️ 每加一道菜或結帳都會即時寫入儲存，即使系統當機或斷電，已記帳的資料不會遺失。</div>
 
-<hr>
+<div class="divider"></div>
 
-<h2><span class="section-icon">📅</span>三、訂位管理</h2>
-<h3>月曆檢視</h3>
+<!-- ③  訂位管理 -->
+<div class="section-header">
+  <div class="section-num">3</div>
+  <div class="section-icon-lbl">📅 訂位管理</div>
+</div>
+
+<h3>月曆總覽</h3>
 <ul>
-  <li>每天格子顯示當日各時段的桌數，例如：<code>12:00</code>＋<code>3</code> 表示 12:00 有 3 桌訂位。</li>
-  <li>左側為時間色塊，右側為桌數色塊，顏色深淺代表重要度。</li>
-  <li>時段超過可見行數時，可在格子內<strong>上下滾動</strong>查看。</li>
-  <li>點擊左右箭頭切換月份。</li>
+  <li>每天格子顯示當日各時段的訂位桌數（例如：<code>18:00</code> <code>3</code> 表示 18:00 有 3 桌）。</li>
+  <li><strong>左右滑動</strong>月曆可切換月份；頂部「<strong>今天</strong>」按鈕可快速跳回當日（非當月時呈灰色）。</li>
+  <li>時段超過可見行數時可在格子內<strong>上下滑動</strong>查看。</li>
 </ul>
-<h3>當日訂位列表</h3>
-<ol>
-  <li>點擊月曆上任一日期，進入該日的訂位列表。</li>
-  <li>點擊右下角「＋」新增訂位。</li>
-  <li>點擊訂位項目可編輯或刪除。</li>
-</ol>
-<h3>新增 / 編輯訂位欄位</h3>
+
+<h3>當日時段格線（點擊日期進入）</h3>
+<ul>
+  <li>橫軸為桌號、縱軸為時段，一目瞭然掌握空桌狀況。</li>
+  <li>點擊空白格子可<strong>新增訂位</strong>。</li>
+  <li>點擊訂位方塊可<strong>編輯或刪除</strong>。</li>
+  <li><strong>長按</strong>訂位方塊可拖曳至其他桌或調整時段。</li>
+</ul>
+
+<h3>訂位欄位說明</h3>
 <table>
   <tr><th>欄位</th><th>說明</th></tr>
-  <tr><td>桌號</td><td>從現有有效桌號選擇</td></tr>
-  <tr><td>客人姓名</td><td>訂位人姓名</td></tr>
+  <tr><td>桌號</td><td>從現有啟用中桌號選擇</td></tr>
+  <tr><td>客人姓名</td><td>訂位人姓名（必填）</td></tr>
   <tr><td>聯絡電話</td><td>選填</td></tr>
-  <tr><td>人數</td><td>用餐人數</td></tr>
+  <tr><td>用餐人數</td><td>選填</td></tr>
   <tr><td>日期</td><td>訂位日期</td></tr>
-  <tr><td>開始 / 結束時間</td><td>用餐時段（依預設時長自動帶入結束時間）</td></tr>
-  <tr><td>重要度</td><td>一般 / 重要 / 非常重要，對應綠 / 黃 / 紅色塊</td></tr>
+  <tr><td>開始 / 結束時間</td><td>用餐時段（依設定時長自動帶入結束時間）</td></tr>
+  <tr><td>重要度</td><td>一般（綠）/ 重要（黃）/ 非常重要（紅）</td></tr>
   <tr><td>備註</td><td>其他注意事項，選填</td></tr>
 </table>
-<div class="note">📌 月曆每行可顯示的時段數量可於「設定 → 訂位設定 → 月曆每行時段數」調整（1～4 個）。</div>
+<div class="note">📌 月曆每行時段數可於「設定 → 訂位設定 → 月曆每行時段數」調整（1～4 個，預設 2）。</div>
 
-<hr>
+<div class="divider"></div>
 
-<h2><span class="section-icon">🥩</span>四、菜單管理</h2>
-<h3>群組管理</h3>
+<!-- ④  菜單管理 -->
+<div class="section-header">
+  <div class="section-num">4</div>
+  <div class="section-icon-lbl">🥩 菜單管理</div>
+</div>
+
+<h3>群組管理（右上角「群組」按鈕）</h3>
 <ul>
-  <li>可新增、修改、排序、刪除菜單群組。</li>
-  <li>刪除群組時，若該群組下有品項，系統會顯示品項數量警告並需再次確認。</li>
+  <li>可<strong>新增、修改名稱、手動排序、刪除</strong>菜單群組。</li>
+  <li>刪除群組時若有品項，系統會顯示品項數量警告並需二次確認。</li>
 </ul>
+
 <h3>品項管理</h3>
 <ul>
-  <li>可新增、編輯、刪除品項，設定名稱、價格、所屬群組。</li>
-  <li>切換「啟用 / 停用」可讓品項在記帳頁顯示或隱藏，不影響歷史訂單。</li>
+  <li>可<strong>新增、編輯（名稱 / 價格 / 群組）、刪除</strong>品項。</li>
+  <li>右側開關切換<strong>啟用 / 停用</strong>——停用品項不在記帳頁顯示，但歷史訂單完整保留。</li>
+  <li>上下箭頭調整品項顯示順序。</li>
 </ul>
 <div class="tip">💡 品項啟停用即時生效，無需重啟 App。</div>
 
-<hr>
+<div class="divider"></div>
 
-<h2><span class="section-icon">🪑</span>五、桌號設定</h2>
+<!-- ⑤  桌號設定 -->
+<div class="section-header">
+  <div class="section-num">5</div>
+  <div class="section-icon-lbl">🪑 桌號設定</div>
+</div>
+
 <ul>
-  <li>可新增、編輯、排序（上移 / 下移）、刪除桌號。</li>
-  <li>桌號名稱最多 20 個字，可加入座位數與備註。</li>
-  <li>停用的桌號不出現在記帳畫面，但歷史訂單仍保留桌號名稱快照。</li>
+  <li>可<strong>新增、編輯（名稱 / 座位數 / 備註）、上下排序、刪除</strong>桌號。</li>
+  <li>桌號名稱最多 <strong>20 個字</strong>。</li>
+  <li>開關停用的桌號不出現在記帳頁，但歷史訂單仍保留桌號名稱快照。</li>
 </ul>
-<div class="warn">⚠️ 刪除桌號不會刪除該桌的歷史訂單，但新訂單無法再選取該桌號。</div>
+<div class="warn">⚠️ 刪除桌號不會刪除歷史訂單，但新訂單將無法選取該桌號。</div>
 
-<hr>
+<div class="divider"></div>
 
-<h2><span class="section-icon">📊</span>六、報表</h2>
-<h3>篩選範圍</h3>
+<!-- ⑥  報表 -->
+<div class="section-header">
+  <div class="section-num">6</div>
+  <div class="section-icon-lbl">📊 報表</div>
+</div>
+
+<h3>日期篩選</h3>
 <table>
   <tr><th>選項</th><th>說明</th></tr>
   <tr><td>今日</td><td>今天的訂單</td></tr>
   <tr><td>昨天</td><td>昨日的訂單</td></tr>
   <tr><td>本週</td><td>本週一到今天</td></tr>
   <tr><td>本月</td><td>本月 1 號到今天</td></tr>
-  <tr><td>全部</td><td>所有訂單（含已刪除，依勾選決定）</td></tr>
+  <tr><td>今年</td><td>今年 1 月 1 日到今天</td></tr>
+  <tr><td>全部</td><td>所有訂單</td></tr>
+  <tr><td>自訂</td><td>手動選擇開始日期與結束日期，點「套用」生效</td></tr>
 </table>
+
 <h3>統計內容</h3>
 <ul>
-  <li>總收入、訂單數、平均客單價。</li>
-  <li>品項銷售排行（依數量）。</li>
-  <li>群組銷售排行（依金額）。</li>
-  <li>逐筆訂單明細（可展開查看品項）。</li>
+  <li>三張統計卡片：<strong>總營業額 / 總筆數 / 平均客單</strong>。</li>
+  <li><strong>品項銷售排行</strong>（依數量排序）+ 圓餅圖。</li>
+  <li><strong>群組銷售排行</strong>（依金額排序）+ 圓餅圖。</li>
+  <li><strong>逐筆訂單明細</strong>（展開查看品項 / 單筆刪除）。</li>
 </ul>
+<div class="tip">💡 橫式螢幕時，排行清單在左、圓餅圖在右，空間更充裕。</div>
+
 <h3>軟刪除</h3>
 <ul>
-  <li>在訂單明細點擊「刪除」僅標記為已刪除，資料不會消失。</li>
-  <li>勾選「顯示已刪除」可讓已刪除訂單納入統計計算。</li>
+  <li>訂單明細右側垃圾桶圖示：僅標記「已刪除」，資料不會消失。</li>
+  <li>勾選右上角「<strong>已刪除</strong>」後，已刪除訂單才納入統計計算。</li>
 </ul>
-<div class="tip">💡 誤刪時可開啟「顯示已刪除」找回訂單，並可取消刪除標記（如功能已實作）。</div>
 
-<hr>
-
-<h2><span class="section-icon">⚙️</span>七、設定</h2>
-<h3>修改 PIN 碼</h3>
-<ol>
-  <li>輸入目前 PIN 碼。</li>
-  <li>輸入新 PIN 碼（4 位數字）。</li>
-  <li>再次確認新 PIN 碼，點擊「確認修改」。</li>
+<h3>匯出 CSV <span class="tag tag-new">v1.2.6+</span></h3>
+<ol class="steps">
+  <li><span class="step-num">1</span><span>設定好日期篩選後，點右上角「<strong>匯出報表</strong>」。</span></li>
+  <li><span class="step-num">2</span><span>選擇儲存位置，確認後即匯出。</span></li>
 </ol>
-<h3>功能頁面</h3>
-<p>可個別開關「訂位」「菜單管理」「桌號設定」「報表」分頁；「記帳」與「設定」為必要分頁，無法關閉。</p>
-<div class="note">📌 停用某分頁時，若使用者正停留在該頁，系統自動跳回記帳頁。</div>
+<p>CSV 包含：檔頭 → 總覽 → 品項排行 → 群組排行 → 訂單明細，採 <strong>UTF-8 + BOM</strong> 格式，Excel / Google Sheets 直接開啟中文不亂碼。</p>
+
+<h3>USB 報表列印 <span class="tag tag-new">v1.2.8+</span></h3>
+<ul>
+  <li>連接 USB 熱感印表機後，點「<strong>報表列印</strong>」按鈕送印目前篩選結果。</li>
+  <li>若日期範圍超過 1 天且訂單超過 10 筆，系統會詢問是否列印訂單明細，可選擇「<strong>只印總覽</strong>」避免誤印大量紙張。</li>
+  <li>印表機設定請至「設定 → 印表機 → 測試列印」確認連線正常。</li>
+</ul>
+<div class="note">📌 報表頂部若出現「🔔 今日仍有 N 桌訂單尚未結帳」提示卡，提醒您確認是否有遺漏的結帳。</div>
+
+<div class="divider"></div>
+
+<!-- ⑦  備份 -->
+<div class="section-header">
+  <div class="section-num">7</div>
+  <div class="section-icon-lbl">💾 資料備份</div>
+</div>
+
+<h3>手動備份匯出 / 匯入</h3>
+<table>
+  <tr><th>動作</th><th>說明</th></tr>
+  <tr><td><strong>備份匯出</strong></td><td>將全部訂單、菜單、桌號打包為 <code>.zip</code>，儲存至您指定位置</td></tr>
+  <tr><td><strong>備份匯入</strong></td><td>選擇 <code>.zip</code> 還原資料；還原完成後 App 自動關閉，重新開啟後生效</td></tr>
+</table>
+<div class="warn">⚠️ 備份匯入會<strong>完整覆蓋</strong>現有資料庫，操作前請確認已匯出最新備份。<br>匯入前系統會自動建立一份安全備份（保留最新 5 份），萬一匯入結果不如預期仍可找回。</div>
+
+<h3>自動儲存（閒置備份）<span class="tag tag-new">v1.2.5+</span></h3>
+<table>
+  <tr><th>項目</th><th>預設</th><th>可調範圍</th></tr>
+  <tr><td>閒置觸發時間</td><td>5 分鐘</td><td>1 / 3 / 5 / 10 / 15 / 30 / 60 分鐘</td></tr>
+  <tr><td>保留天數</td><td>3 天</td><td>1 / 3 / 5 / 7 / 14 / 30 天</td></tr>
+  <tr><td>備份位置</td><td>系統「下載／火鍋店POS備份」</td><td>可指定任何資料夾</td></tr>
+</table>
+<ul>
+  <li>每天最多 1 份，同日觸發會覆寫；切入背景時會立即執行一次備份。</li>
+  <li><strong>App 解除安裝後，預設目錄的備份檔仍會保留</strong>，可重裝後還原。</li>
+  <li>設定頁備份列表可直接點「還原」或「刪除」。</li>
+</ul>
+<div class="tip">💡 若想讓備份自動同步到雲端，可將備份資料夾設為 Google Drive 或 OneDrive 的本地同步資料夾。</div>
+
+<div class="divider"></div>
+
+<!-- ⑧  設定 -->
+<div class="section-header">
+  <div class="section-num">8</div>
+  <div class="section-icon-lbl">⚙️ 設定</div>
+</div>
+
+<h3>修改 PIN 碼</h3>
+<ol class="steps">
+  <li><span class="step-num">1</span><span>輸入目前 PIN 碼。</span></li>
+  <li><span class="step-num">2</span><span>輸入新 PIN 碼（4 位數字）。</span></li>
+  <li><span class="step-num">3</span><span>再次輸入確認，點「確認修改」完成。</span></li>
+</ol>
+
+<h3>功能頁面開關</h3>
+<p>可個別啟用 / 停用「訂位」「菜單管理」「桌號設定」「報表」分頁。「<strong>記帳</strong>」與「<strong>設定</strong>」為必要分頁，無法關閉。</p>
+
+<h3>點餐操作</h3>
+<table>
+  <tr><th>項目</th><th>說明</th></tr>
+  <tr><td>觸覺回饋（震動）</td><td>點選品項與長按連續加減時提供震動，預設開啟</td></tr>
+  <tr><td>連續計數速度</td><td>長按 +/- 時的觸發間隔（預設 100ms，可調 30～500ms）</td></tr>
+  <tr><td>長按啟動延遲</td><td>長按多久後開始連續計數（預設 1.0 秒）</td></tr>
+</table>
+
 <h3>訂位設定</h3>
 <table>
   <tr><th>項目</th><th>說明</th></tr>
-  <tr><td>營業開始 / 結束時間</td><td>訂位可選的時段範圍</td></tr>
+  <tr><td>營業時間</td><td>訂位可選擇的時段範圍</td></tr>
   <tr><td>中間休息時間</td><td>啟用後可設定不接受訂位的休息時段</td></tr>
-  <tr><td>預設用餐時間</td><td>新增訂位時自動帶入的用餐時長（分鐘）</td></tr>
-  <tr><td>月曆每行時段數</td><td>月曆每天格子中，每列顯示幾個時段（1～4 個，預設 2）</td></tr>
+  <tr><td>預設用餐時間</td><td>新增訂位時自動帶入的用餐時長</td></tr>
+  <tr><td>月曆每行時段數</td><td>月曆格子每列顯示幾個時段（1～4 個）</td></tr>
 </table>
-<h3>資料備份</h3>
-<ul>
-  <li><strong>備份匯出</strong>：將整個資料庫打包為 .zip 檔儲存至指定位置。</li>
-  <li><strong>備份匯入</strong>：選取 .zip 備份檔還原資料庫，還原完成後 App 自動關閉，重開後生效。</li>
-</ul>
-<div class="warn">⚠️ 備份匯入會<strong>完整覆蓋</strong>現有資料庫，操作前請先執行備份匯出。</div>
 
-<h3>自動儲存（閒置備份）</h3>
-<table>
-  <tr><th>項目</th><th>預設</th><th>可調範圍</th></tr>
-  <tr><td>啟用自動儲存</td><td>開</td><td>開 / 關</td></tr>
-  <tr><td>閒置觸發時間</td><td>5 分鐘</td><td>1 / 3 / 5 / 10 / 15 / 30 / 60 分鐘</td></tr>
-  <tr><td>保留天數</td><td>3 天</td><td>1 / 3 / 5 / 7 / 14 / 30 天</td></tr>
-  <tr><td>備份資料夾</td><td>系統「下載／火鍋店POS備份」</td><td>可經「選擇其他資料夾」指定任何位置</td></tr>
-</table>
-<ul>
-  <li>檔名：<code>pos_auto_YYYYMMDD.zip</code>，每天 1 份，同日觸發會覆寫。</li>
-  <li>使用者觸控 / 按鍵都會重置閒置計時器；切入背景時會立即執行一次備份。</li>
-  <li>備份列表可直接「還原」或「刪除」。</li>
-  <li><strong>預設存放在公用下載目錄，App 解除安裝後備份檔仍會保留</strong>，可用來重新安裝後還原。</li>
-</ul>
-<div class="tip">💡 建議保留預設位置以確保資料安全；若想放到雲端同步資料夾（OneDrive / Google Drive），請選該資料夾為備份位置。</div>
-
-<h3>收款完成音效</h3>
-<p>按「✓ 確認收款」並寫入 DB 後自動播放歡快上行琶音（C5-E5-G5-C6），音量跟隨系統「通知」音量。</p>
+<h3>印表機</h3>
+<p>透過 USB 連接 ESC/POS 熱感印表機（如 EPSON TM-T70），點「<strong>測試列印</strong>」確認連線正常後即可使用收據列印與報表列印功能。</p>
 
 <h3>資料庫初始化</h3>
-<p>清除所有訂單、菜單與桌號，恢復系統預設資料（需兩步驟確認）。</p>
-<div class="warn">⚠️ 初始化操作<strong>無法復原</strong>，請務必先執行備份匯出或確認自動備份已存在。</div>
+<p>清除全部訂單、菜單與桌號，恢復系統預設資料（需<strong>兩步驟確認</strong>）。</p>
+<div class="warn">⚠️ 初始化操作<strong>無法復原</strong>，請務必先執行備份匯出或確認自動儲存已有最新備份。</div>
 
-<hr>
+<div class="divider"></div>
 
-<h2>⚡ 常見問題</h2>
-<table>
-  <tr><th>問題</th><th>解決方式</th></tr>
-  <tr><td>忘記 PIN 碼</td><td>目前無法透過 App 重設，需備份還原或重裝（資料會遺失）</td></tr>
-  <tr><td>品項在記帳頁不見了</td><td>至菜單管理確認品項是否已停用</td></tr>
-  <tr><td>桌號不見了</td><td>至桌號設定確認桌號是否已停用或刪除</td></tr>
-  <tr><td>報表數字不對</td><td>確認篩選範圍與「已刪除」勾選狀態</td></tr>
-  <tr><td>備份匯入後資料不見</td><td>備份會覆蓋所有資料，請確認備份檔是否正確</td></tr>
-  <tr><td>當機後當天資料不見</td><td>v1.2.2 起已採用 crash-safe DB + 自動儲存，建議保持自動儲存開啟，並可至「下載／火鍋店POS備份」找回當日備份</td></tr>
-  <tr><td>找不到自動備份檔</td><td>手機檔案管理員開啟「內部儲存 → Download → 火鍋店POS備份」</td></tr>
-</table>
+<!-- ❓  常見問題 -->
+<div class="section-header">
+  <div class="section-num">？</div>
+  <div class="section-icon-lbl">❓ 常見問題</div>
+</div>
 
-<hr>
-<p style="text-align:center; color:#555; font-size:12px; padding: 8px 0 16px;">🍲 火鍋店 POS v1.2.2 &nbsp;·&nbsp; Android 10+</p>
+<div class="faq-item">
+  <div class="faq-q">忘記 PIN 碼怎麼辦？</div>
+  <div class="faq-a">目前無法透過 App 重設密碼。若有備份檔，可重裝 App 後匯入備份；若無備份，重裝後資料將遺失。</div>
+</div>
+
+<div class="faq-item">
+  <div class="faq-q">品項在記帳頁消失了？</div>
+  <div class="faq-a">前往「菜單管理」確認該品項的開關是否已被停用，啟用後即可恢復。</div>
+</div>
+
+<div class="faq-item">
+  <div class="faq-q">桌號在記帳頁不見了？</div>
+  <div class="faq-a">前往「桌號設定」確認桌號是否已被停用或刪除，停用狀態下重新開啟即可。</div>
+</div>
+
+<div class="faq-item">
+  <div class="faq-q">報表數字看起來不對？</div>
+  <div class="faq-a">請確認：① 日期篩選範圍是否正確；② 右上角「已刪除」的勾選狀態是否符合預期。</div>
+</div>
+
+<div class="faq-item">
+  <div class="faq-q">備份匯入後資料消失？</div>
+  <div class="faq-a">備份匯入會完整覆蓋現有資料。系統在匯入前已自動建立安全備份（保留最新 5 份），可至「設定 → 資料備份 → 備份匯入」找回匯入前的備份。</div>
+</div>
+
+<div class="faq-item">
+  <div class="faq-q">當機或斷電後當天資料不見？</div>
+  <div class="faq-a">v1.2.2 起採用 crash-safe 資料庫設計，每筆操作即時寫入。若有遺失，請至「設定 → 自動儲存」從備份清單還原，或至手機「下載 → 火鍋店POS備份」資料夾取得備份檔。</div>
+</div>
+
+<div class="faq-item">
+  <div class="faq-q">找不到自動備份檔？</div>
+  <div class="faq-a">開啟手機檔案管理員，進入「內部儲存 → Download → 火鍋店POS備份」資料夾，或於 App「設定 → 自動儲存」中的備份列表直接操作。</div>
+</div>
+
+<div class="faq-item">
+  <div class="faq-q">USB 印表機無法列印？</div>
+  <div class="faq-a">確認 USB 線連接正常，並於「設定 → 印表機 → 測試列印」重新測試連線，授權彈窗請點允許。</div>
+</div>
+
+</div><!-- /section -->
+
+<div class="footer">🍲 火鍋店 POS v1.2.8 &nbsp;·&nbsp; Android 10+<br>如需協助請聯繫系統管理員</div>
 
 </body>
 </html>
