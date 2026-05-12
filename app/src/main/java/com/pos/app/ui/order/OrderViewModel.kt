@@ -17,6 +17,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -145,7 +146,7 @@ class OrderViewModel @Inject constructor(
 
     private fun startDateRolloverObserver() {
         viewModelScope.launch {
-            while (true) {
+            while (isActive) {
                 val now = System.currentTimeMillis()
                 delay((nextDayStart(now) - now).coerceAtLeast(ONE_SECOND_MS))
 
@@ -154,19 +155,18 @@ class OrderViewModel @Inject constructor(
                 if (todayStart == previousTodayStart) continue
 
                 observedTodayStart = todayStart
-                val shouldFollowToday = _uiState.value.selectedDate == previousTodayStart
+                val state = _uiState.value
+                val nextSelectedDate = if (state.selectedDate == previousTodayStart) todayStart else state.selectedDate
+                val shouldFollowToday = nextSelectedDate != state.selectedDate
                 if (shouldFollowToday) {
                     backfillConfirmed = false
                     pendingAddItem = null
                     cancelResetDateTimer()
                 }
-                _uiState.update { state ->
-                    when {
-                        state.selectedDate == previousTodayStart -> state.copy(selectedDate = todayStart, isBackfillMode = false)
-                        state.selectedDate == todayStart -> state.copy(isBackfillMode = false)
-                        else -> state.copy(isBackfillMode = true)
-                    }
-                }
+                _uiState.value = state.copy(
+                    selectedDate = nextSelectedDate,
+                    isBackfillMode = nextSelectedDate != todayStart
+                )
             }
         }
     }
