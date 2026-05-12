@@ -160,8 +160,8 @@ class OrderViewModel @Inject constructor(
                 observedTodayStart = todayStart
                 var wasAutoAdvanced = false
                 _uiState.update { state ->
-                    val updatedSelectedDate = if (state.selectedDate == previousTodayStart) todayStart else state.selectedDate
-                    wasAutoAdvanced = updatedSelectedDate != state.selectedDate
+                    wasAutoAdvanced = state.selectedDate == previousTodayStart
+                    val updatedSelectedDate = if (wasAutoAdvanced) todayStart else state.selectedDate
                     state.copy(
                         selectedDate = updatedSelectedDate,
                         isBackfillMode = updatedSelectedDate != todayStart
