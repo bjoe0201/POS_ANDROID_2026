@@ -80,6 +80,7 @@ class OrderViewModel @Inject constructor(
     private var orderObserveJob: Job? = null
     private var menuObserveJob: Job? = null
     private var resetDateJob: Job? = null
+    private var dateRolloverJob: Job? = null
     private var observedTodayStart = startOfDay(System.currentTimeMillis())
 
     /** 補登確認事件：發出補登日期文字，UI 訂閱後顯示確認對話框 */
@@ -145,14 +146,14 @@ class OrderViewModel @Inject constructor(
     }
 
     private fun startDateRolloverObserver() {
-        viewModelScope.launch {
+        dateRolloverJob?.cancel()
+        dateRolloverJob = viewModelScope.launch {
             while (isActive) {
                 val now = System.currentTimeMillis()
                 delay((nextDayStart(now) - now).coerceAtLeast(ONE_SECOND_MS))
 
                 val previousTodayStart = observedTodayStart
-                val checkTime = System.currentTimeMillis()
-                val todayStart = startOfDay(checkTime)
+                val todayStart = startOfDay(System.currentTimeMillis())
                 if (todayStart == previousTodayStart) continue
 
                 observedTodayStart = todayStart
@@ -180,6 +181,11 @@ class OrderViewModel @Inject constructor(
         cal.set(java.util.Calendar.MILLISECOND, 0)
         cal.add(java.util.Calendar.DAY_OF_YEAR, 1)
         return cal.timeInMillis
+    }
+
+    override fun onCleared() {
+        dateRolloverJob?.cancel()
+        super.onCleared()
     }
 
     fun selectTable(table: TableEntity) {
