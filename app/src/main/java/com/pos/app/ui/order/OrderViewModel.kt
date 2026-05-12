@@ -21,6 +21,8 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+private const val ONE_SECOND_MS = 1_000L
+
 fun startOfDay(millis: Long): Long {
     val cal = java.util.Calendar.getInstance().apply { timeInMillis = millis }
     cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
@@ -77,6 +79,7 @@ class OrderViewModel @Inject constructor(
     private var orderObserveJob: Job? = null
     private var menuObserveJob: Job? = null
     private var resetDateJob: Job? = null
+    private var observedTodayStart = startOfDay(System.currentTimeMillis())
 
     /** 補登確認事件：發出補登日期文字，UI 訂閱後顯示確認對話框 */
     private val _backfillConfirmChannel = Channel<String>(Channel.CONFLATED)
@@ -136,6 +139,46 @@ class OrderViewModel @Inject constructor(
         settingsRepository.printCheckoutEnabled
             .onEach { v -> _uiState.update { it.copy(printCheckoutEnabled = v) } }
             .launchIn(viewModelScope)
+
+        startDateRolloverObserver()
+    }
+
+    private fun startDateRolloverObserver() {
+        viewModelScope.launch {
+            while (true) {
+                val now = System.currentTimeMillis()
+                delay((nextDayStart(now) - now).coerceAtLeast(ONE_SECOND_MS))
+
+                val previousTodayStart = observedTodayStart
+                val todayStart = startOfDay(System.currentTimeMillis())
+                if (todayStart == previousTodayStart) continue
+
+                observedTodayStart = todayStart
+                val shouldFollowToday = _uiState.value.selectedDate == previousTodayStart
+                if (shouldFollowToday) {
+                    backfillConfirmed = false
+                    pendingAddItem = null
+                    cancelResetDateTimer()
+                }
+                _uiState.update { state ->
+                    when {
+                        state.selectedDate == previousTodayStart -> state.copy(selectedDate = todayStart, isBackfillMode = false)
+                        state.selectedDate == todayStart -> state.copy(isBackfillMode = false)
+                        else -> state.copy(isBackfillMode = true)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun nextDayStart(millis: Long): Long {
+        val cal = java.util.Calendar.getInstance().apply { timeInMillis = millis }
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+        cal.set(java.util.Calendar.MINUTE, 0)
+        cal.set(java.util.Calendar.SECOND, 0)
+        cal.set(java.util.Calendar.MILLISECOND, 0)
+        cal.add(java.util.Calendar.DAY_OF_YEAR, 1)
+        return cal.timeInMillis
     }
 
     fun selectTable(table: TableEntity) {
