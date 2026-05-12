@@ -148,7 +148,7 @@ class OrderViewModel @Inject constructor(
         viewModelScope.launch {
             while (isActive) {
                 val now = System.currentTimeMillis()
-                delay((nextDayStart(now) - now + ONE_SECOND_MS).coerceAtLeast(ONE_SECOND_MS))
+                delay((nextDayStart(now) - now).coerceAtLeast(ONE_SECOND_MS))
 
                 val previousTodayStart = observedTodayStart
                 val checkTime = System.currentTimeMillis()
@@ -157,16 +157,16 @@ class OrderViewModel @Inject constructor(
 
                 observedTodayStart = todayStart
                 val state = _uiState.value
-                val nextSelectedDate = if (state.selectedDate == previousTodayStart) todayStart else state.selectedDate
-                val wasAutoAdvanced = nextSelectedDate != state.selectedDate
+                val updatedSelectedDate = if (state.selectedDate == previousTodayStart) todayStart else state.selectedDate
+                val wasAutoAdvanced = updatedSelectedDate != state.selectedDate
                 if (wasAutoAdvanced) {
                     backfillConfirmed = false
                     pendingAddItem = null
                     cancelResetDateTimer()
                 }
                 _uiState.value = state.copy(
-                    selectedDate = nextSelectedDate,
-                    isBackfillMode = nextSelectedDate != todayStart
+                    selectedDate = updatedSelectedDate,
+                    isBackfillMode = updatedSelectedDate != todayStart
                 )
             }
         }
