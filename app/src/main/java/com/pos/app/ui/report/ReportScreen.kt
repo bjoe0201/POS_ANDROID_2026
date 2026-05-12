@@ -33,6 +33,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.runtime.rememberCoroutineScope
 import com.pos.app.ui.theme.LocalPosColors
 import com.pos.app.ui.theme.PosColors
+import com.pos.app.util.datePickerUtcMillisToLocalStartOfDayMillis
+import com.pos.app.util.localDateMillisToDatePickerUtcMillis
+import com.pos.app.util.localTodayToDatePickerUtcMillis
 import com.pos.app.util.UsbPrinterManager
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -89,13 +92,17 @@ fun ReportScreen(
 
     if (showStartDatePicker) {
         val startPickerState = rememberDatePickerState(
-            initialSelectedDateMillis = uiState.customStartDate ?: System.currentTimeMillis()
+            initialSelectedDateMillis = uiState.customStartDate
+                ?.let { localDateMillisToDatePickerUtcMillis(it) }
+                ?: localTodayToDatePickerUtcMillis()
         )
         DatePickerDialog(
             onDismissRequest = { showStartDatePicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    startPickerState.selectedDateMillis?.let { viewModel.setCustomStartDate(it) }
+                    startPickerState.selectedDateMillis?.let {
+                        viewModel.setCustomStartDate(datePickerUtcMillisToLocalStartOfDayMillis(it))
+                    }
                     showStartDatePicker = false
                 }) { Text("確定", color = t.accent) }
             },
@@ -107,13 +114,17 @@ fun ReportScreen(
 
     if (showEndDatePicker) {
         val endPickerState = rememberDatePickerState(
-            initialSelectedDateMillis = uiState.customEndDate ?: uiState.customStartDate ?: System.currentTimeMillis()
+            initialSelectedDateMillis = (uiState.customEndDate ?: uiState.customStartDate)
+                ?.let { localDateMillisToDatePickerUtcMillis(it) }
+                ?: localTodayToDatePickerUtcMillis()
         )
         DatePickerDialog(
             onDismissRequest = { showEndDatePicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    endPickerState.selectedDateMillis?.let { viewModel.setCustomEndDate(it) }
+                    endPickerState.selectedDateMillis?.let {
+                        viewModel.setCustomEndDate(datePickerUtcMillisToLocalStartOfDayMillis(it))
+                    }
                     showEndDatePicker = false
                 }) { Text("確定", color = t.accent) }
             },

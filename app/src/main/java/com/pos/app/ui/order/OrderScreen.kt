@@ -47,6 +47,9 @@ import com.pos.app.data.db.entity.OrderItemEntity
 import com.pos.app.data.db.entity.TableEntity
 import com.pos.app.ui.theme.LocalPosColors
 import com.pos.app.ui.theme.PosColors
+import com.pos.app.util.datePickerUtcMillisToLocalStartOfDayMillis
+import com.pos.app.util.localDateMillisToDatePickerUtcMillis
+import com.pos.app.util.localTodayToDatePickerUtcMillis
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -118,10 +121,10 @@ fun OrderScreen(
 
     if (showDatePicker) {
         val pickerState = rememberDatePickerState(
-            initialSelectedDateMillis = uiState.selectedDate,
+            initialSelectedDateMillis = localDateMillisToDatePickerUtcMillis(uiState.selectedDate),
             selectableDates = object : SelectableDates {
                 override fun isSelectableDate(utcTimeMillis: Long) =
-                    utcTimeMillis <= System.currentTimeMillis()
+                    utcTimeMillis <= localTodayToDatePickerUtcMillis()
             }
         )
         DatePickerDialog(
@@ -130,7 +133,9 @@ fun OrderScreen(
                 Row {
                     TextButton(onClick = { showDatePicker = false }) { Text("取消") }
                     TextButton(onClick = {
-                        pickerState.selectedDateMillis?.let { viewModel.updateSelectedDate(it) }
+                        pickerState.selectedDateMillis?.let {
+                            viewModel.updateSelectedDate(datePickerUtcMillisToLocalStartOfDayMillis(it))
+                        }
                         showDatePicker = false
                     }) { Text("確定") }
                 }

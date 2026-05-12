@@ -13,6 +13,20 @@ _尚無未發佈變更。_
 
 ---
 
+## [v1.2.10] - 2026-05-12
+
+**versionCode:** 18 · **下載：** [GitHub Release](https://github.com/bjoe0201/POS_ANDROID_2026/releases/tag/v1.2.10)
+
+### 📅 日期選擇器時區修正
+
+- 修正「記帳點餐」右上角「今天」開啟日期選擇器時，在台灣等正時區會顯示成前一天（例如 5/12 顯示 5/11）的問題。
+- 修正報表自訂日期的開始 / 結束日期選擇器，避免選取今天後再次開啟卻退回前一天。
+- 新增 `DatePickerDateUtils`，統一處理 Material 3 `DatePicker` 的 UTC 日期毫秒與 App 內部本機日界線毫秒轉換。
+- 新增單元測試涵蓋 `Asia/Taipei`、`UTC`、`America/Los_Angeles`，防止日期轉換回歸。
+- 強化 GitHub Release 流程文件與 Gradle 防呆：Release 任務缺少完整 keystore 設定會直接失敗，避免誤上傳 unsigned/debug APK。
+
+---
+
 ## [v1.2.9] - 2026-04-30
 
 **versionCode:** 17 · **下載：** [GitHub Release](https://github.com/bjoe0201/POS_ANDROID_2026/releases/tag/v1.2.9)

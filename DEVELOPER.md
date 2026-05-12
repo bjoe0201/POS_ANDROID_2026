@@ -75,7 +75,7 @@
 
 ## Release 簽章設定
 
-正式版 APK（`assembleRelease`）需要提供 keystore 才能產生已簽章的安裝檔。若專案根目錄**未放置** `keystore.properties`，release build 會略過簽章並產生 `-unsigned.apk`（無法安裝）。
+正式版 APK（`assembleRelease`）需要提供 keystore 才能產生已簽章、可直接安裝的檔案。本專案在執行 Release 任務時會檢查 `keystore.properties` 是否包含完整簽章欄位；若缺少簽章設定會直接建置失敗，避免誤發 `-unsigned.apk`。
 
 1. 產生 release keystore（僅需一次）：
 
@@ -100,6 +100,15 @@
    # 輸出：app/build/outputs/apk/release/app-release.apk
    ```
 
+4. 發佈前必須使用 Android SDK `apksigner` 驗證：
+
+   ```powershell
+   $apk = ".\app\build\outputs\apk\release\app-release.apk"
+   & $apksigner.FullName verify --verbose --print-certs $apk
+   ```
+
+   驗證結果需包含 `Verifies`、`Verified using v2 scheme ... true`、`Number of signers: 1`，且 signer certificate 不可為 `CN=Android Debug`。
+
 > ⚠️ 請妥善保管 `pos-release.jks` 與密碼，**遺失後無法更新已發佈的 App**。
 
 ---
@@ -119,6 +128,7 @@ ui/
   login / order / reservation / menu / table / report / settings / theme
 util/BackupManager.kt              — 透過 SAF（Storage Access Framework）進行 ZIP 備份匯出/匯入
 util/UsbPrinterManager.kt          — USB 熱感印表機列印（測試頁、收款收據、訂單明細、報表列印）
+util/DatePickerDateUtils.kt        — Material3 DatePicker UTC 日期毫秒 ↔ 本機日期日界線轉換
 ```
 
 ---
@@ -223,6 +233,16 @@ util/UsbPrinterManager.kt          — USB 熱感印表機列印（測試頁、�
 `ReportViewModel.exportCsv(context, uri)` 依當前 UI 篩選後的資料組裝多區段 CSV：**檔頭 → 總覽 → 品項銷售排行 → 群組銷售排行 → 訂單明細**。寫入 UTF-8 + BOM 給 Excel 中文直開。
 
 `ReportViewModel.printCurrentReport(context)` 會以目前 `ReportUiState` 建立列印快照，呼叫 `UsbPrinterManager.printReport(...)` 透過 USB 熱感印表機列印相同篩選範圍的報表。`ReportUiState.isPrintingReport` 用於避免重複送印；`UsbPrinterManager` 會將長報表分段渲染為 Bitmap，降低單張 Bitmap 過高的風險。
+
+---
+
+## 日期選擇器時區處理
+
+Material3 `DatePicker` 的 `selectedDateMillis` / `initialSelectedDateMillis` 語意是 **UTC 日期午夜**，不可直接與 App 內部使用的本機時區日界線 millis 混用，否則在 `Asia/Taipei` 等正時區會出現「今天顯示為昨天」的偏移。
+
+- `OrderScreen` / `ReportScreen` 開啟 DatePicker 前，使用 `localDateMillisToDatePickerUtcMillis(...)` 或 `localTodayToDatePickerUtcMillis()`。
+- 使用者按下確定後，使用 `datePickerUtcMillisToLocalStartOfDayMillis(...)` 再寫回 ViewModel。
+- 相關測試位於 `DatePickerDateUtilsTest`，涵蓋台灣、UTC 與美西時區。
 
 ---
 

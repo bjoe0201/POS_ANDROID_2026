@@ -34,6 +34,140 @@
 
 在 Windows 上請使用 `gradlew.bat` 取代 `./gradlew`。
 
+## 固定 APK 發佈流程（每次 GitHub Release 必做）
+
+GitHub Releases 對外提供的 APK 必須是 `assembleRelease` 產生的 **已簽章 release APK**，可直接安裝；嚴禁上傳 debug APK、unsigned APK、或 Android Debug 憑證簽章的 APK。
+
+- 正確上傳檔：`app/build/outputs/apk/release/app-release.apk`
+- Release asset 命名：`POS_ANDROID_2026-vX.Y.Z-release.apk`
+- 禁止上傳：`app-debug.apk`、`app-release-unsigned.apk`、任何 debug-signed APK
+- 禁止提交或上傳：`keystore.properties`、`*.jks`、密碼、mapping 檔、unsigned APK
+- 本專案 `app/build.gradle.kts` 在執行 Release 任務時會要求完整簽章設定，缺少 `keystore.properties` 必要欄位會直接建置失敗，避免誤發 unsigned APK。
+
+### Release signing setup
+
+專案根目錄需有本機私密檔 `keystore.properties`（已由 `.gitignore` 排除），必要欄位：
+
+```properties
+storeFile=pos-release.jks
+storePassword=private-store-password
+keyAlias=pos-release
+keyPassword=private-key-password
+```
+
+### 0) 發佈前檢查（Windows PowerShell）
+
+```powershell
+git branch --show-current
+git remote -v
+gh auth status
+gh release list --limit 100
+```
+
+確認：
+
+- 分支為預期發佈分支（通常 `main`）。
+- 遠端為 `https://github.com/bjoe0201/POS_ANDROID_2026.git`。
+- GitHub CLI 登入正確帳號。
+- `gradle.properties` 的 `APP_VERSION_CODE` 已遞增，`APP_VERSION_NAME` 與 release tag（去掉 `v`）一致。
+
+### 1) 建置可安裝 release APK
+
+```powershell
+.\gradlew.bat clean assembleRelease
+```
+
+輸出檔案：
+
+```text
+app/build/outputs/apk/release/app-release.apk
+```
+
+檔案與 SHA256 檢查：
+
+```powershell
+$apk = ".\app\build\outputs\apk\release\app-release.apk"
+Test-Path $apk
+Get-Item $apk
+Get-FileHash $apk -Algorithm SHA256
+```
+
+### 2) 簽章驗證（必做）
+
+```powershell
+$sdk = if (Test-Path .\local.properties) {
+  Get-Content .\local.properties |
+    Where-Object { $_ -like 'sdk.dir=*' } |
+    Select-Object -First 1 |
+    ForEach-Object { ($_ -replace '^sdk.dir=', '') -replace '\\:', ':' -replace '\\\\', '\' }
+}
+if (-not $sdk) { $sdk = $env:ANDROID_HOME }
+if (-not $sdk) { $sdk = $env:ANDROID_SDK_ROOT }
+if (-not $sdk) { throw 'Android SDK path not found. Set sdk.dir in local.properties or ANDROID_HOME/ANDROID_SDK_ROOT.' }
+$apksigner = Get-ChildItem -Path (Join-Path $sdk 'build-tools') -Recurse -Filter 'apksigner.bat' |
+  Sort-Object FullName -Descending |
+  Select-Object -First 1
+if (-not $apksigner) { throw 'apksigner.bat not found under Android SDK build-tools.' }
+& $apksigner.FullName verify --verbose --print-certs .\app\build\outputs\apk\release\app-release.apk
+```
+
+驗證結果必須包含：
+
+```text
+Verifies
+Verified using v2 scheme (APK Signature Scheme v2): true
+Number of signers: 1
+```
+
+Signer certificate 不可為 `CN=Android Debug`。
+
+### 3) 上傳 GitHub Release APK
+
+```powershell
+$version = "vX.Y.Z"
+$asset = ".\app\build\outputs\apk\release\POS_ANDROID_2026-$version-release.apk"
+Copy-Item ".\app\build\outputs\apk\release\app-release.apk" $asset -Force
+gh release upload $version $asset --clobber
+```
+
+若先前誤傳錯誤 asset，先刪除：
+
+```powershell
+gh release delete-asset vX.Y.Z app-debug.apk --yes
+gh release delete-asset vX.Y.Z app-release-unsigned.apk --yes
+gh release delete-asset vX.Y.Z wrong-asset-name.apk --yes
+```
+
+### 4) 發佈後驗證
+
+```powershell
+gh release view vX.Y.Z --json tagName,name,url,publishedAt,assets
+gh release list --limit 100
+```
+
+Release asset 應只保留當版 signed APK，例如：
+
+```text
+POS_ANDROID_2026-v1.2.10-release.apk
+```
+
+可比對本機與 GitHub asset SHA256：
+
+```powershell
+$version = "vX.Y.Z"
+$localHash = (Get-FileHash ".\app\build\outputs\apk\release\app-release.apk" -Algorithm SHA256).Hash.ToLowerInvariant()
+$release = gh release view $version --json assets | ConvertFrom-Json
+$asset = $release.assets | Where-Object { $_.name -eq "POS_ANDROID_2026-$version-release.apk" }
+$remoteHash = $asset.digest -replace '^sha256:', ''
+[pscustomobject]@{ LocalHash = $localHash; RemoteHash = $remoteHash; Match = ($localHash -eq $remoteHash) }
+```
+
+### 安裝注意事項
+
+- 若裝置已安裝 debug-signed APK，可能因簽章不同無法覆蓋安裝；需先解除安裝舊 App。
+- 每次 release 必須遞增 `APP_VERSION_CODE`，否則 Android 會拒絕降版或同版覆蓋安裝。
+- 未來所有公開版本需固定使用同一把 release keystore；遺失或更換 keystore 會導致既有使用者無法正常更新。
+
 ## 版本更新方式
 
 - 版本參數統一維護在 `gradle.properties`：
@@ -64,6 +198,7 @@ ui/
   login / order / reservation / menu / table / report / settings / theme
 util/BackupManager.kt              — 透過 SAF（Storage Access Framework）進行 ZIP 備份匯出/匯入
 util/UsbPrinterManager.kt          — USB 熱感印表機列印（測試頁、收款收據、訂單明細、報表列印）
+util/DatePickerDateUtils.kt        — Material3 DatePicker UTC 日期毫秒 ↔ 本機日期日界線轉換
 ```
 
 ### 導航流程
@@ -96,6 +231,7 @@ util/UsbPrinterManager.kt          — USB 熱感印表機列印（測試頁、�
 - `CATEGORIES` 清單（順序 + 顯示名稱）位於 `ui/order/OrderViewModel.kt`，並由 menu 與其他畫面匯入使用。
 - 預設 PIN：`1234`（SHA-256 雜湊）。連續輸入錯誤 3 次會鎖定 30 秒。
 - 預設桌號：8 張（預植入為「1號桌」至「8號桌」）；可於 TableSettingScreen 進行 CRUD 調整。
+- **日期選擇器時區轉換**：Material3 `DatePicker` 的 `selectedDateMillis` / `initialSelectedDateMillis` 是 UTC 日期午夜；App 內部日期狀態使用本機日界線 millis。所有 DatePicker 進出都必須透過 `DatePickerDateUtils`，避免台灣時區今天顯示成昨天。
 - **長按連續加減**：記帳頁 `+` / `−` 按鈕長按超過 `qty_repeat_initial_delay_ms`（預設 1000ms）後，依 `qty_repeat_interval_ms`（預設 100ms）連續觸發；按住或單擊時卡片上方以 Popup 顯示數字氣泡（+ 亮黃 / − 亮綠），單擊放開後保留 600ms 才隱藏。觸覺回饋可於設定 `haptic_enabled` 整體開關，使用 `LocalHapticFeedback`。實作位於 `OrderScreen.kt` 的 `RepeatableQtyButton` 與 `MenuCard`。
 - **DataStore keys**（`SettingsDataStore`）：含 PIN、Tab 開關、營業時間、訂位、自動備份，以及 `QTY_REPEAT_INTERVAL_MS` / `QTY_REPEAT_INITIAL_DELAY_MS`（點餐長按連續加減速度／啟動延遲）、`HAPTIC_ENABLED`（觸覺回饋開關，預設開啟）、`PRINTER_TEST_PASSED`（印表機測試已通過）、`PRINT_CHECKOUT_ENABLED`（收款結帳自動列印）、`PRINT_DETAIL_ENABLED`（報表明細列印按鈕）。
 

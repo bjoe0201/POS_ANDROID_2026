@@ -18,7 +18,12 @@ val keystoreProperties = Properties().apply {
         keystorePropertiesFile.inputStream().use { load(it) }
     }
 }
-val hasReleaseSigning = keystoreProperties.getProperty("storeFile")?.isNotBlank() == true
+val hasReleaseSigning = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+    .all { keystoreProperties.getProperty(it)?.isNotBlank() == true }
+val requestedReleaseBuild = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
+if (requestedReleaseBuild && !hasReleaseSigning) {
+    throw GradleException("Release signing is required. Create keystore.properties with storeFile, storePassword, keyAlias, and keyPassword before running release tasks.")
+}
 
 android {
     namespace = "com.pos.app"
