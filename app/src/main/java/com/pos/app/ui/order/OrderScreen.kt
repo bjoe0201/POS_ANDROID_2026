@@ -204,7 +204,7 @@ fun OrderScreen(
                 lastCheckout?.let { (name, amt) ->
                     Text("✓ $name NT${"$"}${amt.toLong()}", color = t.success, fontSize = 12.sp, modifier = Modifier.padding(end = 8.dp))
                 }
-                val todayStart = remember { startOfDay(System.currentTimeMillis()) }
+                val todayStart = startOfDay(System.currentTimeMillis())
                 val isToday = uiState.selectedDate == todayStart
                 val dateLabel = if (isToday) "今天" else dateFormatter.format(Date(uiState.selectedDate))
                 val dateTint = if (isToday) t.textSub else t.error
@@ -757,7 +757,7 @@ private fun CancelOrderDialog(tableName: String, onConfirm: () -> Unit, onDismis
 @Composable
 private fun CheckoutDialog(tableName: String, orderItems: List<OrderItemEntity>, total: Double, remark: String, selectedDate: Long, errorMessage: String?, onRemarkChange: (String) -> Unit, onConfirm: () -> Unit, onDismiss: () -> Unit, t: PosColors) {
     val quantityCount = orderItems.sumOf { it.quantity }
-    val todayStart = remember { startOfDay(System.currentTimeMillis()) }
+    val todayStart = startOfDay(System.currentTimeMillis())
     val isToday = selectedDate == todayStart
     val dateLabel = if (isToday) "今天" else SimpleDateFormat("MM/dd", Locale.getDefault()).format(Date(selectedDate))
 

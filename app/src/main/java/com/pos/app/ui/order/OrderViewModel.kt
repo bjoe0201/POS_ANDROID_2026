@@ -17,9 +17,12 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+private const val ONE_SECOND_MS = 1_000L
 
 fun startOfDay(millis: Long): Long {
     val cal = java.util.Calendar.getInstance().apply { timeInMillis = millis }
@@ -77,6 +80,8 @@ class OrderViewModel @Inject constructor(
     private var orderObserveJob: Job? = null
     private var menuObserveJob: Job? = null
     private var resetDateJob: Job? = null
+    private var dateRolloverJob: Job? = null
+    private var observedTodayStart = startOfDay(System.currentTimeMillis())
 
     /** 補登確認事件：發出補登日期文字，UI 訂閱後顯示確認對話框 */
     private val _backfillConfirmChannel = Channel<String>(Channel.CONFLATED)
@@ -136,6 +141,54 @@ class OrderViewModel @Inject constructor(
         settingsRepository.printCheckoutEnabled
             .onEach { v -> _uiState.update { it.copy(printCheckoutEnabled = v) } }
             .launchIn(viewModelScope)
+
+        startDateRolloverObserver()
+    }
+
+    private fun startDateRolloverObserver() {
+        dateRolloverJob?.cancel()
+        dateRolloverJob = viewModelScope.launch {
+            while (isActive) {
+                val now = System.currentTimeMillis()
+                delay((nextDayStart(now) - now).coerceAtLeast(ONE_SECOND_MS))
+
+                val previousTodayStart = observedTodayStart
+                val wokeAt = System.currentTimeMillis()
+                val todayStart = startOfDay(wokeAt)
+                if (todayStart == previousTodayStart) continue
+
+                observedTodayStart = todayStart
+                var wasAutoAdvanced = false
+                _uiState.update { state ->
+                    wasAutoAdvanced = state.selectedDate == previousTodayStart
+                    val updatedSelectedDate = if (wasAutoAdvanced) todayStart else state.selectedDate
+                    state.copy(
+                        selectedDate = updatedSelectedDate,
+                        isBackfillMode = updatedSelectedDate != todayStart
+                    )
+                }
+                if (wasAutoAdvanced) {
+                    backfillConfirmed = false
+                    pendingAddItem = null
+                    cancelResetDateTimer()
+                }
+            }
+        }
+    }
+
+    private fun nextDayStart(millis: Long): Long {
+        val cal = java.util.Calendar.getInstance().apply { timeInMillis = millis }
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+        cal.set(java.util.Calendar.MINUTE, 0)
+        cal.set(java.util.Calendar.SECOND, 0)
+        cal.set(java.util.Calendar.MILLISECOND, 0)
+        cal.add(java.util.Calendar.DAY_OF_YEAR, 1)
+        return cal.timeInMillis
+    }
+
+    override fun onCleared() {
+        dateRolloverJob?.cancel()
+        super.onCleared()
     }
 
     fun selectTable(table: TableEntity) {
