@@ -24,6 +24,9 @@ interface OrderItemDao {
     @Query("SELECT * FROM order_items WHERE orderId = :orderId AND menuItemId = :menuItemId LIMIT 1")
     suspend fun findItem(orderId: Long, menuItemId: Long): OrderItemEntity?
 
+    @Query("SELECT COUNT(*) FROM order_items WHERE orderId = :orderId")
+    suspend fun countItemsForOrder(orderId: Long): Int
+
     @Query("SELECT * FROM order_items WHERE orderId IN (SELECT id FROM orders)")
     suspend fun getAllOrderItems(): List<OrderItemEntity>
 

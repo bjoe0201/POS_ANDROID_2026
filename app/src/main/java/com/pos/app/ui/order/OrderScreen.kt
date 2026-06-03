@@ -1,4 +1,4 @@
-package com.pos.app.ui.order
+﻿package com.pos.app.ui.order
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -194,7 +194,7 @@ fun OrderScreen(
         )
     }
 
-    val openCount = uiState.openOrderTotals.count { it.value > 0.0 }
+    val openCount = uiState.openOrderTotals.size
 
     Scaffold(
         containerColor = t.bg,

@@ -30,6 +30,10 @@ interface OrderDao {
     @Query("UPDATE orders SET status = :status, closedAt = :closedAt, remark = :remark WHERE id = :id")
     suspend fun closeOrder(id: Long, status: String, closedAt: Long, remark: String)
 
+    /** 取消所有沒有品項的 OPEN 訂單（清理孤兒空訂單） */
+    @Query("UPDATE orders SET status = 'CANCELLED', closedAt = :closedAt WHERE status = 'OPEN' AND id NOT IN (SELECT DISTINCT orderId FROM order_items)")
+    suspend fun cancelEmptyOpenOrders(closedAt: Long): Int
+
     @Query("DELETE FROM orders")
     suspend fun deleteAll()
 }

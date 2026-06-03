@@ -1,4 +1,4 @@
-package com.pos.app.ui.order
+﻿package com.pos.app.ui.order
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -143,6 +143,9 @@ class OrderViewModel @Inject constructor(
             .launchIn(viewModelScope)
 
         startDateRolloverObserver()
+
+        // 啟動時清理孤兒空訂單（品項全刪但 OPEN 未關閉的殘留訂單）
+        viewModelScope.launch { orderRepository.cancelEmptyOpenOrders() }
     }
 
     private fun startDateRolloverObserver() {
@@ -334,6 +337,10 @@ class OrderViewModel @Inject constructor(
             val orderId = _uiState.value.order?.id
             if (orderId == null) {
                 _uiState.update { it.copy(errorMessage = "無可結帳訂單，請重新選桌後再試") }
+                return@launch
+            }
+            if (_uiState.value.orderItems.isEmpty()) {
+                _uiState.update { it.copy(errorMessage = "訂單無品項，無法結帳") }
                 return@launch
             }
             runCatching {

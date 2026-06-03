@@ -55,14 +55,25 @@ class OrderRepository @Inject constructor(
             )
         } else {
             val newQty = existing.quantity + delta
-            if (newQty <= 0) orderItemDao.delete(existing)
-            else orderItemDao.update(existing.copy(quantity = newQty))
+            if (newQty <= 0) {
+                orderItemDao.delete(existing)
+                // 品項全部移除時自動取消空訂單，避免留下孤兒 OPEN 訂單
+                if (orderItemDao.countItemsForOrder(orderId) == 0) {
+                    orderDao.closeOrder(orderId, "CANCELLED", System.currentTimeMillis(), "")
+                }
+            } else {
+                orderItemDao.update(existing.copy(quantity = newQty))
+            }
         }
         flush()
     }
 
     suspend fun removeItem(item: OrderItemEntity) {
         orderItemDao.delete(item)
+        // 品項全部移除時自動取消空訂單，避免留下孤兒 OPEN 訂單
+        if (orderItemDao.countItemsForOrder(item.orderId) == 0) {
+            orderDao.closeOrder(item.orderId, "CANCELLED", System.currentTimeMillis(), "")
+        }
         flush()
     }
 
@@ -73,6 +84,12 @@ class OrderRepository @Inject constructor(
 
     suspend fun cancelOrder(orderId: Long) {
         orderDao.closeOrder(orderId, "CANCELLED", System.currentTimeMillis(), "")
+        flush()
+    }
+
+    /** 啟動時清理所有無品項的 OPEN 訂單（修復因崩潰或異常中斷產生的孤兒空訂單） */
+    suspend fun cancelEmptyOpenOrders() {
+        orderDao.cancelEmptyOpenOrders(System.currentTimeMillis())
         flush()
     }
 
