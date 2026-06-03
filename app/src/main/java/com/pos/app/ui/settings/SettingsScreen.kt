@@ -1,4 +1,4 @@
-package com.pos.app.ui.settings
+﻿package com.pos.app.ui.settings
 
 import android.os.Build
 import android.webkit.WebView
@@ -893,6 +893,22 @@ private fun AutoBackupSection(
         }
     }
 
+    // SAF 雲端硬碟資料夾選擇器
+    val pickCloudFolderLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }
+            viewModel.setCloudBackupTreeUri(uri.toString())
+        }
+    }
+
     val lastText = remember(uiState.autoBackupLastAt) {
         uiState.autoBackupLastAt?.let {
             SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(it))
@@ -1061,6 +1077,63 @@ private fun AutoBackupSection(
             }
         }
 
+
+        // 第2備份資料夾（雲端硬碟）
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("第2備份資料(雲端硬碟)", color = t.text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Switch(
+                checked = uiState.cloudBackupEnabled,
+                onCheckedChange = { viewModel.setCloudBackupEnabled(it) },
+                enabled = uiState.autoBackupEnabled,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = t.accent,
+                    checkedTrackColor = t.accentDim2,
+                    uncheckedThumbColor = t.textMuted,
+                    uncheckedTrackColor = t.border
+                )
+            )
+        }
+        if (uiState.cloudBackupEnabled) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(t.surface)
+                    .border(1.dp, t.border, RoundedCornerShape(8.dp))
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text("第2備份資料夾(雲端硬碟)", color = t.textMuted, fontSize = 12.sp)
+                if (uiState.cloudBackupStorageDesc.isNotBlank()) {
+                    Text(uiState.cloudBackupStorageDesc, color = t.text, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                } else {
+                    Text("尚未設定", color = t.textMuted, fontSize = 13.sp)
+                }
+                Text(
+                    "備份時先寫入本機，再複製到雲端硬碟；離線時雲端會在恢復連線後由系統自動同步。",
+                    color = t.textMuted, fontSize = 11.sp
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { pickCloudFolderLauncher.launch(null) },
+                        border = androidx.compose.foundation.BorderStroke(1.dp, t.accent),
+                        shape = RoundedCornerShape(8.dp)
+                    ) { Text("選擇雲端硬碟資料夾", color = t.accent, fontSize = 12.sp) }
+                    if (uiState.cloudBackupStorageDesc.isNotBlank()) {
+                        OutlinedButton(
+                            onClick = { viewModel.clearCloudBackupTreeUri() },
+                            border = androidx.compose.foundation.BorderStroke(1.dp, t.border),
+                            shape = RoundedCornerShape(8.dp)
+                        ) { Text("移除", color = t.textSub, fontSize = 12.sp) }
+                    }
+                }
+            }
+        }
         Spacer(Modifier.height(8.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),

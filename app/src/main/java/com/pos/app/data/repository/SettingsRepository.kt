@@ -1,4 +1,4 @@
-package com.pos.app.data.repository
+﻿package com.pos.app.data.repository
 
 import com.pos.app.data.datastore.SettingsDataStore
 import kotlinx.coroutines.flow.Flow
@@ -23,6 +23,8 @@ class SettingsRepository @Inject constructor(private val dataStore: SettingsData
     val autoBackupIdleMinutes: Flow<Int> = dataStore.autoBackupIdleMinutes
     val autoBackupRetentionDays: Flow<Int> = dataStore.autoBackupRetentionDays
     val autoBackupExternalTreeUri: Flow<String> = dataStore.autoBackupExternalTreeUri
+    val cloudBackupEnabled: Flow<Boolean> = dataStore.cloudBackupEnabled
+    val cloudBackupTreeUri: Flow<String> = dataStore.cloudBackupTreeUri
     val qtyRepeatIntervalMs: Flow<Int> = dataStore.qtyRepeatIntervalMs
     val qtyRepeatInitialDelayMs: Flow<Int> = dataStore.qtyRepeatInitialDelayMs
     val hapticEnabled: Flow<Boolean> = dataStore.hapticEnabled
@@ -46,6 +48,8 @@ class SettingsRepository @Inject constructor(private val dataStore: SettingsData
     suspend fun setAutoBackupIdleMinutes(v: Int) = dataStore.setAutoBackupIdleMinutes(v)
     suspend fun setAutoBackupRetentionDays(v: Int) = dataStore.setAutoBackupRetentionDays(v)
     suspend fun setAutoBackupExternalTreeUri(v: String) = dataStore.setAutoBackupExternalTreeUri(v)
+    suspend fun setCloudBackupEnabled(v: Boolean) = dataStore.setCloudBackupEnabled(v)
+    suspend fun setCloudBackupTreeUri(v: String) = dataStore.setCloudBackupTreeUri(v)
     suspend fun setQtyRepeatIntervalMs(v: Int) = dataStore.setQtyRepeatIntervalMs(v.coerceIn(30, 500))
     suspend fun setQtyRepeatInitialDelayMs(v: Int) = dataStore.setQtyRepeatInitialDelayMs(v.coerceIn(300, 2000))
     suspend fun setHapticEnabled(v: Boolean)        = dataStore.setHapticEnabled(v)

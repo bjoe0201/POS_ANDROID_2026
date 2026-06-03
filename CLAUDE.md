@@ -233,7 +233,7 @@ util/DatePickerDateUtils.kt        — Material3 DatePicker UTC 日期毫秒 ↔
 - 預設桌號：8 張（預植入為「1號桌」至「8號桌」）；可於 TableSettingScreen 進行 CRUD 調整。
 - **日期選擇器時區轉換**：Material3 `DatePicker` 的 `selectedDateMillis` / `initialSelectedDateMillis` 是 UTC 日期午夜；App 內部日期狀態使用本機日界線 millis。所有 DatePicker 進出都必須透過 `DatePickerDateUtils`，避免台灣時區今天顯示成昨天。
 - **長按連續加減**：記帳頁 `+` / `−` 按鈕長按超過 `qty_repeat_initial_delay_ms`（預設 1000ms）後，依 `qty_repeat_interval_ms`（預設 100ms）連續觸發；按住或單擊時卡片上方以 Popup 顯示數字氣泡（+ 亮黃 / − 亮綠），單擊放開後保留 600ms 才隱藏。觸覺回饋可於設定 `haptic_enabled` 整體開關，使用 `LocalHapticFeedback`。實作位於 `OrderScreen.kt` 的 `RepeatableQtyButton` 與 `MenuCard`。
-- **DataStore keys**（`SettingsDataStore`）：含 PIN、Tab 開關、營業時間、訂位、自動備份，以及 `QTY_REPEAT_INTERVAL_MS` / `QTY_REPEAT_INITIAL_DELAY_MS`（點餐長按連續加減速度／啟動延遲）、`HAPTIC_ENABLED`（觸覺回饋開關，預設開啟）、`PRINTER_TEST_PASSED`（印表機測試已通過）、`PRINT_CHECKOUT_ENABLED`（收款結帳自動列印）、`PRINT_DETAIL_ENABLED`（報表明細列印按鈕）。
+- **DataStore keys**（`SettingsDataStore`）：含 PIN、Tab 開關、營業時間、訂位、自動備份，以及 `QTY_REPEAT_INTERVAL_MS` / `QTY_REPEAT_INITIAL_DELAY_MS`（點餐長按連續加減速度／啟動延遲）、`HAPTIC_ENABLED`（觸覺回饋開關，預設開啟）、`PRINTER_TEST_PASSED`（印表機測試已通過）、`PRINT_CHECKOUT_ENABLED`（收款結帳自動列印）、`PRINT_DETAIL_ENABLED`（報表明細列印按鈕）、`CLOUD_BACKUP_ENABLED`（雲端備份開關，預設關閉）、`CLOUD_BACKUP_TREE_URI`（雲端備份 SAF tree URI）。
 
 ### OrderUiState 關鍵欄位（v1.2.7 新增）
 
@@ -249,6 +249,8 @@ util/DatePickerDateUtils.kt        — Material3 DatePicker UTC 日期毫秒 ↔
 `BackupManager`（util）使用 Android SAF（`ActivityResultContracts.CreateDocument` / `OpenDocument`）。整個 SQLite 資料庫 WAL checkpoint 後打包為 `.zip` 匯出；匯入時覆蓋整個資料庫並自動重啟。匯出/匯入 UI 位於 `SettingsScreen`。
 
 **v1.2.7 新增 `autoBackupBeforeImport(context, db)`**：匯入前於私有目錄 `files/auto_backup/` 建立 `auto-pre-import-yyyyMMdd-HHmmss.zip`（保留最新 5 份，FIFO 輪替）。`SettingsViewModel.restoreDb` 匯入前自動呼叫此函式。
+
+**v1.2.12 新增雲端備份**：`AutoBackupManager` 支援「第2備份資料夾（雲端硬碟）」，備份策略為 Local Cache First——本機備份完成後 best-effort 複製到使用者透過 SAF 選取的雲端硬碟資料夾（`copyToCloudBestEffort`）。設定 UI 位於 `SettingsScreen` 自動儲存區塊，含 Switch + SAF 資料夾選擇器。
 
 ## 報表匯出 / 列印
 

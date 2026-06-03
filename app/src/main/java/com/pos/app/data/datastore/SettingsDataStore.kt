@@ -1,4 +1,4 @@
-package com.pos.app.data.datastore
+﻿package com.pos.app.data.datastore
 
 import android.content.Context
 import androidx.datastore.core.DataStore
@@ -33,6 +33,8 @@ class SettingsDataStore(private val context: Context) {
         private val AUTO_BACKUP_IDLE_MINUTES = intPreferencesKey("auto_backup_idle_minutes")
         private val AUTO_BACKUP_RETENTION_DAYS = intPreferencesKey("auto_backup_retention_days")
         private val AUTO_BACKUP_EXTERNAL_TREE_URI = stringPreferencesKey("auto_backup_external_tree_uri")
+        private val CLOUD_BACKUP_ENABLED = booleanPreferencesKey("cloud_backup_enabled")
+        private val CLOUD_BACKUP_TREE_URI = stringPreferencesKey("cloud_backup_tree_uri")
         private val QTY_REPEAT_INTERVAL_MS = intPreferencesKey("qty_repeat_interval_ms")
         private val QTY_REPEAT_INITIAL_DELAY_MS = intPreferencesKey("qty_repeat_initial_delay_ms")
         private val HAPTIC_ENABLED = booleanPreferencesKey("haptic_enabled")
@@ -119,6 +121,12 @@ class SettingsDataStore(private val context: Context) {
     suspend fun setAutoBackupIdleMinutes(v: Int) { context.dataStore.edit { it[AUTO_BACKUP_IDLE_MINUTES] = v } }
     suspend fun setAutoBackupRetentionDays(v: Int) { context.dataStore.edit { it[AUTO_BACKUP_RETENTION_DAYS] = v } }
     suspend fun setAutoBackupExternalTreeUri(v: String) { context.dataStore.edit { it[AUTO_BACKUP_EXTERNAL_TREE_URI] = v } }
+
+    // -- 蝚??遢鞈?憭橘??脩垢蝖祉?嚗?--
+    val cloudBackupEnabled: Flow<Boolean> = context.dataStore.data.map { it[CLOUD_BACKUP_ENABLED] ?: false }
+    val cloudBackupTreeUri: Flow<String> = context.dataStore.data.map { it[CLOUD_BACKUP_TREE_URI] ?: "" }
+    suspend fun setCloudBackupEnabled(v: Boolean) { context.dataStore.edit { it[CLOUD_BACKUP_ENABLED] = v } }
+    suspend fun setCloudBackupTreeUri(v: String) { context.dataStore.edit { it[CLOUD_BACKUP_TREE_URI] = v } }
 
     // ── 點餐長按連續加減 ──
     val qtyRepeatIntervalMs: Flow<Int> = context.dataStore.data.map { it[QTY_REPEAT_INTERVAL_MS] ?: 100 }

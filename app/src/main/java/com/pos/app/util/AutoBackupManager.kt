@@ -1,4 +1,4 @@
-package com.pos.app.util
+﻿package com.pos.app.util
 
 import android.content.ContentValues
 import android.content.Context
@@ -63,6 +63,8 @@ class AutoBackupManager @Inject constructor(
     @Volatile private var idleMinutes: Int = 5
     @Volatile private var retentionDays: Int = 3
     @Volatile private var externalTreeUri: String = ""
+    @Volatile private var cloudBackupEnabled: Boolean = false
+    @Volatile private var cloudBackupTreeUri: String = ""
     private var idleJob: Job? = null
 
     private val _lastBackupAt = MutableStateFlow<Long?>(null)
@@ -91,6 +93,16 @@ class AutoBackupManager @Inject constructor(
                 externalTreeUri = cfg.externalTreeUri
                 _lastBackupAt.value = runCatching { listBackups().firstOrNull()?.lastModified }.getOrNull()
                 if (!cfg.enabled) cancelTimer() else scheduleIdleBackup()
+            }
+            .launchIn(scope)
+
+        combine(
+            settingsDataStore.cloudBackupEnabled,
+            settingsDataStore.cloudBackupTreeUri
+        ) { enabled, uri -> enabled to uri }
+            .onEach { (enabled, uri) ->
+                cloudBackupEnabled = enabled
+                cloudBackupTreeUri = uri
             }
             .launchIn(scope)
     }
@@ -142,8 +154,30 @@ class AutoBackupManager @Inject constructor(
                 _lastBackupAt.value = entry.lastModified
                 _backupTick.value = _backupTick.value + 1
                 storage.cleanup(retentionDays)
+                // 蝚??遢嚗蝡舐′蝣?best-effort嚗仃??敶梢銝餃?隞踝?
+                copyToCloudBestEffort(fileName)
                 entry
             }
+        }
+    }
+
+    fun cloudStorageDescription(): String {
+        val uriStr = cloudBackupTreeUri
+        if (uriStr.isBlank()) return ""
+        return runCatching {
+            val df = DocumentFile.fromTreeUri(context, Uri.parse(uriStr))
+            df?.name ?: uriStr
+        }.getOrDefault(uriStr)
+    }
+
+    private fun copyToCloudBestEffort(fileName: String) {
+        if (!cloudBackupEnabled || cloudBackupTreeUri.isBlank()) return
+        runCatching {
+            val cloudStorage = SafTreeStorage(context, Uri.parse(cloudBackupTreeUri))
+            cloudStorage.writeBackup(fileName) { os ->
+                BackupManager.writeZipToStream(context, os, appDatabase)
+            }
+            cloudStorage.cleanup(retentionDays)
         }
     }
 

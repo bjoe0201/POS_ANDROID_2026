@@ -35,6 +35,8 @@ data class SettingsUiState(
     val autoBackupFiles: List<BackupEntry> = emptyList(),
     val autoBackupStorageDesc: String = "下載／火鍋店POS備份",
     val autoBackupUsingCustom: Boolean = false,
+    val cloudBackupEnabled: Boolean = false,
+    val cloudBackupStorageDesc: String = "",
     val qtyRepeatIntervalMs: Int = 100,
     val qtyRepeatInitialDelayMs: Int = 1000,
     val hapticEnabled: Boolean = true,
@@ -111,6 +113,16 @@ class SettingsViewModel @Inject constructor(
                 }
             }
             .launchIn(viewModelScope)
+        settingsRepository.cloudBackupEnabled
+            .onEach { v -> _uiState.update { it.copy(cloudBackupEnabled = v) } }
+            .launchIn(viewModelScope)
+        settingsRepository.cloudBackupTreeUri
+            .onEach { uri ->
+                _uiState.update {
+                    it.copy(cloudBackupStorageDesc = if (uri.isNotBlank()) autoBackupManager.cloudStorageDescription() else "")
+                }
+            }
+            .launchIn(viewModelScope)
         autoBackupManager.lastBackupAt
             .onEach { t -> _uiState.update { it.copy(autoBackupLastAt = t, autoBackupFiles = loadAutoBackupFiles()) } }
             .launchIn(viewModelScope)
@@ -183,6 +195,24 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.setAutoBackupExternalTreeUri("")
             _uiState.update { it.copy(message = "已改回預設下載目錄") }
+        }
+    }
+
+    fun setCloudBackupEnabled(v: Boolean) {
+        viewModelScope.launch { settingsRepository.setCloudBackupEnabled(v) }
+    }
+
+    fun setCloudBackupTreeUri(uri: String) {
+        viewModelScope.launch {
+            settingsRepository.setCloudBackupTreeUri(uri)
+            _uiState.update { it.copy(message = "已設定雲端備份資料夾") }
+        }
+    }
+
+    fun clearCloudBackupTreeUri() {
+        viewModelScope.launch {
+            settingsRepository.setCloudBackupTreeUri("")
+            _uiState.update { it.copy(message = "已移除雲端備份資料夾") }
         }
     }
 

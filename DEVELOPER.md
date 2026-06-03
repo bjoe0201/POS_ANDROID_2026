@@ -194,6 +194,8 @@ util/DatePickerDateUtils.kt        — Material3 DatePicker UTC 日期毫秒 ↔
 | 營業時間 | 訂位用 |
 | 訂位設定 | 休息時間、用餐時長、月曆每行時段數 |
 | 自動備份 | 閒置時間、保留天數、目標資料夾 |
+| `CLOUD_BACKUP_ENABLED` | 雲端備份開關（預設關閉） |
+| `CLOUD_BACKUP_TREE_URI` | 雲端備份 SAF tree URI |
 | `QTY_REPEAT_INTERVAL_MS` | 點餐長按連續加減間隔（預設 100ms） |
 | `QTY_REPEAT_INITIAL_DELAY_MS` | 長按啟動延遲（預設 1000ms） |
 | `HAPTIC_ENABLED` | 觸覺回饋開關（預設開啟） |
@@ -219,6 +221,8 @@ util/DatePickerDateUtils.kt        — Material3 DatePicker UTC 日期毫秒 ↔
 `BackupManager`（util）使用 Android SAF（`ActivityResultContracts.CreateDocument` / `OpenDocument`）。整個 SQLite 資料庫 WAL checkpoint 後打包為 `.zip` 匯出；匯入時覆蓋整個資料庫並自動重啟。匯出/匯入 UI 位於 `SettingsScreen`。
 
 **`autoBackupBeforeImport(context, db)`**：匯入前於私有目錄 `files/auto_backup/` 建立 `auto-pre-import-yyyyMMdd-HHmmss.zip`（保留最新 5 份，FIFO 輪替）。`SettingsViewModel.restoreDb` 匯入前自動呼叫此函式。
+
+**雲端備份（v1.2.12）**：`AutoBackupManager` 支援 Local Cache First 策略——本機備份完成後，若 `CLOUD_BACKUP_ENABLED` 為 true 且 `CLOUD_BACKUP_TREE_URI` 已設定，`copyToCloudBestEffort()` 會將 ZIP 複製到使用者透過 SAF 選取的雲端硬碟資料夾。複製失敗僅 log 不中斷主備份流程；離線時由雲端硬碟 App 自行同步。
 
 ### 崩潰保護
 

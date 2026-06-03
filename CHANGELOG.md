@@ -13,6 +13,23 @@ _尚無未發佈變更。_
 
 ---
 
+## [v1.2.12] - 2026-06-03
+
+**versionCode:** 20 · **下載：** [GitHub Release](https://github.com/bjoe0201/POS_ANDROID_2026/releases/tag/v1.2.12)
+
+### ☁️ 第2備份資料夾（雲端硬碟）
+
+新增「自動儲存」區塊中的雲端備份功能，讓自動備份同時複製一份到使用者指定的雲端硬碟資料夾（Google Drive、OneDrive 等），透過 SAF 選取資料夾後，備份採「本機優先」策略：先完成本機備份，再 best-effort 複製到雲端；離線時由雲端硬碟 App 自行同步。
+
+#### 新增項目
+
+- **雲端備份開關**：設定 → 自動儲存區塊新增「第2備份資料(雲端硬碟)」Switch，需先開啟自動儲存才可啟用。
+- **SAF 資料夾選擇**：開啟後顯示資料夾卡片，可透過「選擇雲端硬碟資料夾」按鈕以系統檔案選擇器指定目標目錄，支援「移除」恢復為未設定。
+- **Local Cache First 備份策略**：`AutoBackupManager.performBackupInternal()` 完成本機備份後，呼叫 `copyToCloudBestEffort()` 將 ZIP 複製到雲端 SAF 資料夾，失敗僅 log 不中斷主流程。
+- **DataStore 新增 keys**：`CLOUD_BACKUP_ENABLED`（預設關閉）、`CLOUD_BACKUP_TREE_URI`（SAF tree URI）。
+
+---
+
 ## [v1.2.11] - 2026-06-03
 
 **versionCode:** 19 · **下載：** [GitHub Release](https://github.com/bjoe0201/POS_ANDROID_2026/releases/tag/v1.2.11)
@@ -299,6 +316,7 @@ _尚無未發佈變更。_
 
 | 版本 | versionCode | 發行日 | 主題 |
 |------|:----------:|--------|------|
+| v1.2.12 | 20 | 2026-06-03 | 第2備份資料夾（雲端硬碟） |
 | v1.2.11 | 19 | 2026-06-03 | 孤兒空訂單修正 + 徽章一致性 |
 | v1.2.10 | 18 | 2026-05-12 | 日期選擇器時區修正 |
 | v1.2.9 | 17 | 2026-04-30 | 使用說明改版 + 錨點跳轉 + 文件重構 |
