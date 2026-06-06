@@ -42,6 +42,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+enum class ExportFormat { CSV, PDF }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportScreen(
@@ -58,6 +60,8 @@ fun ReportScreen(
     var showStartDatePicker by remember { mutableStateOf(false) }
     var showEndDatePicker by remember { mutableStateOf(false) }
     var showReportDetailPrintDialog by remember { mutableStateOf(false) }
+    var showExportDialog by remember { mutableStateOf(false) }
+    var pendingIncludeDetails by remember { mutableStateOf(true) }
     val context = LocalContext.current
 
     val onReportPrintClick: () -> Unit = {
@@ -71,10 +75,16 @@ fun ReportScreen(
     val exportCsvLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("text/csv")
     ) { uri: android.net.Uri? ->
-        uri?.let { viewModel.exportCsv(context, it) }
+        uri?.let { viewModel.exportCsv(context, it, pendingIncludeDetails) }
     }
 
-    val suggestedFileName: () -> String = {
+    val exportPdfLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri: android.net.Uri? ->
+        uri?.let { viewModel.exportPdf(context, it, pendingIncludeDetails) }
+    }
+
+    val suggestedFileName: (ext: String) -> String = { ext ->
         val now = System.currentTimeMillis()
         val start = uiState.customStartDate ?: now
         val end = uiState.customEndDate ?: now
@@ -87,7 +97,7 @@ fun ReportScreen(
             DateRange.ALL -> "all_${fileNameSdf.format(Date(now))}"
             DateRange.CUSTOM -> "${fileNameSdf.format(Date(start))}_${fileNameSdf.format(Date(end))}"
         }
-        "report_$label.csv"
+        "report_$label.$ext"
     }
 
     if (showStartDatePicker) {
@@ -151,6 +161,23 @@ fun ReportScreen(
         )
     }
 
+    var confirmRestoreId by remember { mutableStateOf<Long?>(null) }
+    if (confirmRestoreId != null) {
+        AlertDialog(
+            onDismissRequest = { confirmRestoreId = null },
+            containerColor = t.surface,
+            title = { Text("確認還原", color = t.text, fontWeight = FontWeight.Bold) },
+            text = { Text("此訂單將從「已刪除」還原，重新計入統計。確定繼續？", color = t.textSub) },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.restoreOrder(confirmRestoreId!!); confirmRestoreId = null },
+                    colors = ButtonDefaults.buttonColors(containerColor = t.accent)
+                ) { Text("還原") }
+            },
+            dismissButton = { TextButton(onClick = { confirmRestoreId = null }) { Text("取消", color = t.textSub) } }
+        )
+    }
+
     if (showReportDetailPrintDialog) {
         AlertDialog(
             onDismissRequest = { showReportDetailPrintDialog = false },
@@ -186,6 +213,21 @@ fun ReportScreen(
                     }
                 }
             }
+        )
+    }
+
+    if (showExportDialog) {
+        ExportOptionsDialog(
+            onDismiss = { showExportDialog = false },
+            onConfirm = { format, includeDetails ->
+                showExportDialog = false
+                pendingIncludeDetails = includeDetails
+                when (format) {
+                    ExportFormat.CSV -> exportCsvLauncher.launch(suggestedFileName("csv"))
+                    ExportFormat.PDF -> exportPdfLauncher.launch(suggestedFileName("pdf"))
+                }
+            },
+            t = t
         )
     }
 
@@ -321,7 +363,7 @@ fun ReportScreen(
                                 ReportActionButtons(
                                     uiState = uiState,
                                     onPrint = onReportPrintClick,
-                                    onExport = { exportCsvLauncher.launch(suggestedFileName()) },
+                                    onExport = { showExportDialog = true },
                                     t = t
                                 )
                             }
@@ -330,7 +372,7 @@ fun ReportScreen(
                             ReportActionButtons(
                                 uiState = uiState,
                                 onPrint = onReportPrintClick,
-                                onExport = { exportCsvLauncher.launch(suggestedFileName()) },
+                                onExport = { showExportDialog = true },
                                 t = t
                             )
                         }
@@ -520,6 +562,7 @@ fun ReportScreen(
                             owi = owi,
                             sdf = sdf,
                             onDelete = { confirmDeleteId = owi.order.id },
+                            onRestore = { confirmRestoreId = owi.order.id },
                             printDetailEnabled = uiState.printDetailEnabled,
                             t = t
                         )
@@ -571,6 +614,75 @@ private fun ReportActionButtons(
 }
 
 @Composable
+private fun ExportOptionsDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (format: ExportFormat, includeDetails: Boolean) -> Unit,
+    t: PosColors
+) {
+    var selectedFormat by remember { mutableStateOf(ExportFormat.CSV) }
+    var includeDetails by remember { mutableStateOf(true) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = t.surface,
+        title = { Text("匯出選項", color = t.text, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("輸出格式", color = t.textSub, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ExportFormat.entries.forEach { fmt ->
+                            val label = if (fmt == ExportFormat.CSV) "CSV" else "PDF"
+                            FilterChip(
+                                selected = selectedFormat == fmt,
+                                onClick = { selectedFormat = fmt },
+                                label = { Text(label, fontSize = 13.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = t.accent,
+                                    selectedLabelColor = Color.White
+                                )
+                            )
+                        }
+                    }
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("內容範圍", color = t.textSub, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = includeDetails,
+                            onClick = { includeDetails = true },
+                            label = { Text("列印明細", fontSize = 13.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = t.accent,
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                        FilterChip(
+                            selected = !includeDetails,
+                            onClick = { includeDetails = false },
+                            label = { Text("只印總覽", fontSize = 13.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = t.accent,
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(selectedFormat, includeDetails) },
+                colors = ButtonDefaults.buttonColors(containerColor = t.accent)
+            ) { Text("匯出") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消", color = t.textSub) }
+        }
+    )
+}
+
+@Composable
 private fun ReportChip(label: String, active: Boolean, onClick: () -> Unit, t: PosColors) {
     Box(
         modifier = Modifier
@@ -605,6 +717,7 @@ private fun OrderSummaryRow(
     owi: OrderWithItems,
     sdf: SimpleDateFormat,
     onDelete: () -> Unit,
+    onRestore: () -> Unit,
     printDetailEnabled: Boolean,
     t: PosColors
 ) {
@@ -655,6 +768,13 @@ private fun OrderSummaryRow(
                 IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
                     Icon(Icons.Default.Delete, contentDescription = "刪除",
                         tint = t.error, modifier = Modifier.size(16.dp))
+                }
+            } else {
+                TextButton(
+                    onClick = onRestore,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                ) {
+                    Text("還原", fontSize = 12.sp, color = t.accent, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
