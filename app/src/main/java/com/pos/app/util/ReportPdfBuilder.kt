@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
+import androidx.documentfile.provider.DocumentFile
 import com.pos.app.ui.report.ReportUiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -102,6 +103,27 @@ object ReportPdfBuilder {
             } finally {
                 document.close()
             }
+        }
+    }
+
+    /**
+     * 將報表 PDF 自動存入 [treeUri] 所代表的 SAF 資料夾。
+     * 以當下時間戳命名，例如 report-20260606-183000.pdf。
+     * 內部建立 [DocumentFile] 後委派給 [build]。
+     */
+    suspend fun buildToTreeUri(
+        context: Context,
+        treeUri: Uri,
+        state: ReportUiState,
+        includeOrderDetails: Boolean
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val dir = DocumentFile.fromTreeUri(context, treeUri)
+                ?: error("無法開啟 PDF 存檔目錄")
+            val ts = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(Date())
+            val file = dir.createFile("application/pdf", "report-$ts")
+                ?: error("無法在目錄中建立 PDF 檔案")
+            build(context, file.uri, state, includeOrderDetails).getOrThrow()
         }
     }
 
