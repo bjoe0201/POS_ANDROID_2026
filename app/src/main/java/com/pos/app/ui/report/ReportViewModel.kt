@@ -48,7 +48,9 @@ data class ReportUiState(
     val isPrintingReport: Boolean = false,
     val printDetailEnabled: Boolean = false,
     /** 目前尚未結帳（OPEN）的訂單列表（Step 5） */
-    val openOrders: List<OrderEntity> = emptyList()
+    val openOrders: List<OrderEntity> = emptyList(),
+    val pdfPrinterEnabled: Boolean = false,
+    val pdfPrinterTreeUri: String = ""
 )
 
 @HiltViewModel
@@ -73,6 +75,12 @@ class ReportViewModel @Inject constructor(
             .launchIn(viewModelScope)
         settingsRepository.printDetailEnabled
             .onEach { v -> _uiState.update { it.copy(printDetailEnabled = v) } }
+            .launchIn(viewModelScope)
+        settingsRepository.pdfPrinterEnabled
+            .onEach { v -> _uiState.update { it.copy(pdfPrinterEnabled = v) } }
+            .launchIn(viewModelScope)
+        settingsRepository.pdfPrinterTreeUri
+            .onEach { v -> _uiState.update { it.copy(pdfPrinterTreeUri = v) } }
             .launchIn(viewModelScope)
     }
 
@@ -243,16 +251,21 @@ class ReportViewModel @Inject constructor(
             val snapshot = buildReportPrintSnapshot(state, includeOrderDetails)
             _uiState.update { it.copy(isPrintingReport = true, message = null) }
             val result = UsbPrinterManager.printReport(context.applicationContext, snapshot)
-            _uiState.update {
-                it.copy(
-                    isPrintingReport = false,
-                    message = if (result.isSuccess) {
-                        "報表已送出列印"
-                    } else {
-                        "報表列印失敗：${result.exceptionOrNull()?.message ?: "未知錯誤"}"
-                    }
+            val usbMsg = if (result.isSuccess) "報表已送出列印"
+                         else "報表列印失敗：${result.exceptionOrNull()?.message ?: "未知錯誤"}"
+            val message = if (result.isSuccess
+                && state.pdfPrinterEnabled
+                && state.pdfPrinterTreeUri.isNotBlank()
+            ) {
+                val pdfResult = ReportPdfBuilder.buildToTreeUri(
+                    context, Uri.parse(state.pdfPrinterTreeUri), state, includeOrderDetails
                 )
+                if (pdfResult.isSuccess) "$usbMsg，PDF 已自動存檔"
+                else "$usbMsg（PDF 存檔失敗：${pdfResult.exceptionOrNull()?.message ?: "未知錯誤"}）"
+            } else {
+                usbMsg
             }
+            _uiState.update { it.copy(isPrintingReport = false, message = message) }
         }
     }
 
