@@ -253,13 +253,14 @@ class ReportViewModel @Inject constructor(
             val result = UsbPrinterManager.printReport(context.applicationContext, snapshot)
             val usbMsg = if (result.isSuccess) "報表已送出列印"
                          else "報表列印失敗：${result.exceptionOrNull()?.message ?: "未知錯誤"}"
-            val message = if (result.isSuccess
-                && state.pdfPrinterEnabled
-                && state.pdfPrinterTreeUri.isNotBlank()
-            ) {
-                val pdfResult = ReportPdfBuilder.buildToTreeUri(
-                    context, Uri.parse(state.pdfPrinterTreeUri), state, includeOrderDetails
-                )
+            val message = if (result.isSuccess && state.pdfPrinterEnabled) {
+                val pdfResult = if (state.pdfPrinterTreeUri.isNotBlank()) {
+                    ReportPdfBuilder.buildToTreeUri(
+                        context, Uri.parse(state.pdfPrinterTreeUri), state, includeOrderDetails
+                    )
+                } else {
+                    ReportPdfBuilder.buildToDownloads(context, state, includeOrderDetails)
+                }
                 if (pdfResult.isSuccess) "$usbMsg，PDF 已自動存檔"
                 else "$usbMsg（PDF 存檔失敗：${pdfResult.exceptionOrNull()?.message ?: "未知錯誤"}）"
             } else {

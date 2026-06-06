@@ -1,7 +1,9 @@
 package com.pos.app.util
 
+import android.content.ContentValues
 import android.content.Context
 import android.graphics.Canvas
+import android.provider.MediaStore
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.pdf.PdfDocument
@@ -103,6 +105,28 @@ object ReportPdfBuilder {
             } finally {
                 document.close()
             }
+        }
+    }
+
+    /**
+     * 將報表 PDF 存入系統「下載」目錄（MediaStore，無需 SAF 授權）。
+     * 檔名格式：report-yyyyMMdd-HHmmss.pdf。
+     */
+    suspend fun buildToDownloads(
+        context: Context,
+        state: ReportUiState,
+        includeOrderDetails: Boolean
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val ts = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(Date())
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, "report-$ts.pdf")
+                put(MediaStore.Downloads.MIME_TYPE, "application/pdf")
+            }
+            val uri = context.contentResolver.insert(
+                MediaStore.Downloads.EXTERNAL_CONTENT_URI, values
+            ) ?: error("無法在下載目錄建立 PDF 檔案")
+            build(context, uri, state, includeOrderDetails).getOrThrow()
         }
     }
 

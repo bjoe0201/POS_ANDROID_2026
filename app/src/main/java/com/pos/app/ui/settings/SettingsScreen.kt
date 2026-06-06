@@ -689,72 +689,72 @@ private fun PrinterSection(
                 )
             }
 
-            Spacer(Modifier.height(10.dp))
+        }
 
-            // PDF 列印機（自動存放）
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text("PDF列印機(自動存放)", color = t.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    Text("列印時自動儲存一份 PDF 至指定資料夾", color = t.textMuted, fontSize = 12.sp)
-                }
-                Switch(
-                    checked = pdfPrinterEnabled,
-                    onCheckedChange = { viewModel.setPdfPrinterEnabled(it) },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = t.accent, checkedTrackColor = t.accentDim2,
-                        uncheckedThumbColor = t.textMuted, uncheckedTrackColor = t.border
-                    )
-                )
+        // PDF 列印機（獨立功能，不需測試印表機）
+        Spacer(Modifier.height(14.dp))
+        Box(Modifier.height(1.dp).fillMaxWidth().background(t.border))
+        Spacer(Modifier.height(14.dp))
+
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("PDF列印機(自動存放)", color = t.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text("列印時自動儲存一份 PDF 至指定資料夾", color = t.textMuted, fontSize = 12.sp)
             }
+            Switch(
+                checked = pdfPrinterEnabled,
+                onCheckedChange = { viewModel.setPdfPrinterEnabled(it) },
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = t.accent, checkedTrackColor = t.accentDim2,
+                    uncheckedThumbColor = t.textMuted, uncheckedTrackColor = t.border
+                )
+            )
+        }
 
-            if (pdfPrinterEnabled) {
-                Spacer(Modifier.height(8.dp))
-                val folderDesc = remember(pdfPrinterTreeUri) {
-                    if (pdfPrinterTreeUri.isBlank()) ""
-                    else runCatching {
-                        androidx.documentfile.provider.DocumentFile
-                            .fromTreeUri(context, android.net.Uri.parse(pdfPrinterTreeUri))?.name
-                            ?: pdfPrinterTreeUri
-                    }.getOrDefault(pdfPrinterTreeUri)
-                }
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(t.surface)
-                        .border(1.dp, t.border, RoundedCornerShape(8.dp))
-                        .padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text("PDF 存檔目錄", color = t.textMuted, fontSize = 12.sp)
-                    if (folderDesc.isNotBlank()) {
-                        Text(folderDesc, color = t.text, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                    } else {
-                        Text("尚未設定", color = t.textMuted, fontSize = 13.sp)
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (pdfPrinterEnabled) {
+            Spacer(Modifier.height(8.dp))
+            val folderDesc = remember(pdfPrinterTreeUri) {
+                if (pdfPrinterTreeUri.isBlank()) "下載（系統預設）"
+                else runCatching {
+                    androidx.documentfile.provider.DocumentFile
+                        .fromTreeUri(context, android.net.Uri.parse(pdfPrinterTreeUri))?.name
+                        ?: pdfPrinterTreeUri
+                }.getOrDefault(pdfPrinterTreeUri)
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(t.surface)
+                    .border(1.dp, t.border, RoundedCornerShape(8.dp))
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text("PDF 存檔目錄", color = t.textMuted, fontSize = 12.sp)
+                Text(folderDesc, color = t.text, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { pickPdfFolderLauncher.launch(null) },
+                        border = androidx.compose.foundation.BorderStroke(1.dp, t.accent),
+                        shape = RoundedCornerShape(8.dp)
+                    ) { Text("選擇自訂目錄", color = t.accent, fontSize = 12.sp) }
+                    if (pdfPrinterTreeUri.isNotBlank()) {
                         OutlinedButton(
-                            onClick = { pickPdfFolderLauncher.launch(null) },
-                            border = androidx.compose.foundation.BorderStroke(1.dp, t.accent),
+                            onClick = { viewModel.clearPdfPrinterTreeUri() },
+                            border = androidx.compose.foundation.BorderStroke(1.dp, t.border),
                             shape = RoundedCornerShape(8.dp)
-                        ) { Text("選擇資料夾", color = t.accent, fontSize = 12.sp) }
-                        if (folderDesc.isNotBlank()) {
-                            OutlinedButton(
-                                onClick = { viewModel.clearPdfPrinterTreeUri() },
-                                border = androidx.compose.foundation.BorderStroke(1.dp, t.border),
-                                shape = RoundedCornerShape(8.dp)
-                            ) { Text("移除", color = t.textSub, fontSize = 12.sp) }
-                        }
+                        ) { Text("還原預設", color = t.textSub, fontSize = 12.sp) }
                     }
                 }
             }
         }
     }
 }
+
 
 @Composable
 private fun ChangePinContent(viewModel: SettingsViewModel, snackbarHostState: SnackbarHostState, t: PosColors) {
