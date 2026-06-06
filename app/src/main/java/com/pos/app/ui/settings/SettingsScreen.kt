@@ -379,7 +379,9 @@ fun SettingsScreen(
                     viewModel = viewModel,
                     printerTestPassed = uiState.printerTestPassed,
                     printCheckoutEnabled = uiState.printCheckoutEnabled,
-                    printDetailEnabled = uiState.printDetailEnabled
+                    printDetailEnabled = uiState.printDetailEnabled,
+                    pdfPrinterEnabled = uiState.pdfPrinterEnabled,
+                    pdfPrinterTreeUri = uiState.pdfPrinterTreeUri
                 )
 
                 // Backup section
@@ -547,10 +549,26 @@ private fun PrinterSection(
     viewModel: SettingsViewModel,
     printerTestPassed: Boolean,
     printCheckoutEnabled: Boolean,
-    printDetailEnabled: Boolean
+    printDetailEnabled: Boolean,
+    pdfPrinterEnabled: Boolean,
+    pdfPrinterTreeUri: String
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val pickPdfFolderLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }
+            viewModel.setPdfPrinterTreeUri(uri.toString())
+        }
+    }
     var statusMsg by remember { mutableStateOf("") }
     var isTesting by remember { mutableStateOf(false) }
 
@@ -669,6 +687,70 @@ private fun PrinterSection(
                         uncheckedThumbColor = t.textMuted, uncheckedTrackColor = t.border
                     )
                 )
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            // PDF 列印機（自動存放）
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("PDF列印機(自動存放)", color = t.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text("列印時自動儲存一份 PDF 至指定資料夾", color = t.textMuted, fontSize = 12.sp)
+                }
+                Switch(
+                    checked = pdfPrinterEnabled,
+                    onCheckedChange = { viewModel.setPdfPrinterEnabled(it) },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = t.accent, checkedTrackColor = t.accentDim2,
+                        uncheckedThumbColor = t.textMuted, uncheckedTrackColor = t.border
+                    )
+                )
+            }
+
+            if (pdfPrinterEnabled) {
+                Spacer(Modifier.height(8.dp))
+                val folderDesc = remember(pdfPrinterTreeUri) {
+                    if (pdfPrinterTreeUri.isBlank()) ""
+                    else runCatching {
+                        androidx.documentfile.provider.DocumentFile
+                            .fromTreeUri(context, android.net.Uri.parse(pdfPrinterTreeUri))?.name
+                            ?: pdfPrinterTreeUri
+                    }.getOrDefault(pdfPrinterTreeUri)
+                }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(t.surface)
+                        .border(1.dp, t.border, RoundedCornerShape(8.dp))
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text("PDF 存檔目錄", color = t.textMuted, fontSize = 12.sp)
+                    if (folderDesc.isNotBlank()) {
+                        Text(folderDesc, color = t.text, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    } else {
+                        Text("尚未設定", color = t.textMuted, fontSize = 13.sp)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { pickPdfFolderLauncher.launch(null) },
+                            border = androidx.compose.foundation.BorderStroke(1.dp, t.accent),
+                            shape = RoundedCornerShape(8.dp)
+                        ) { Text("選擇資料夾", color = t.accent, fontSize = 12.sp) }
+                        if (folderDesc.isNotBlank()) {
+                            OutlinedButton(
+                                onClick = { viewModel.clearPdfPrinterTreeUri() },
+                                border = androidx.compose.foundation.BorderStroke(1.dp, t.border),
+                                shape = RoundedCornerShape(8.dp)
+                            ) { Text("移除", color = t.textSub, fontSize = 12.sp) }
+                        }
+                    }
+                }
             }
         }
     }
