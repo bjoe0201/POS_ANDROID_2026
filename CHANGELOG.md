@@ -13,6 +13,26 @@ _尚無未發佈變更。_
 
 ---
 
+## [v1.2.15] - 2026-06-06
+
+**versionCode:** 23 · **下載：** [GitHub Release](https://github.com/bjoe0201/POS_ANDROID_2026/releases/tag/v1.2.15)
+
+### 🖨️ PDF 收據自動存檔 + 設定改善
+
+#### 新增項目
+
+- **確認收款自動存收據 PDF**：啟用 PDF 列印機後，按下「✓ 確認收款」完成結帳，系統自動存一份收據 PDF（含訂單號、桌號、品項明細、合計）；依設定存至自訂 SAF 目錄或系統下載資料夾。
+- **PDF 檔名加入訂單號與桌號**：收據 PDF 檔名格式改為 `receipt-yyyyMMdd-HHmmss-{訂單號}-{桌號}.pdf`，方便事後查找對帳。
+- **測試PDF檔存檔按鈕**：設定 → 印表機 → PDF 存檔目錄新增「測試PDF檔存檔」按鈕，按下後立即產生並儲存一份示範 PDF（`test-yyyyMMdd-HHmmss.pdf`），可驗證目錄寫入權限是否正常；儲存結果顯示於按鈕下方。
+
+#### 技術細節
+
+- `ReportPdfBuilder` 新增 `ReceiptData` data class，及 `buildReceiptToDownloads` / `buildReceiptToTreeUri` / `buildTestPdfToDownloads` / `buildTestPdfToTreeUri` 方法。
+- `OrderUiState` 新增 `pdfPrinterEnabled` / `pdfPrinterTreeUri`，`OrderViewModel` 訂閱對應 DataStore 設定。
+- `sanitizeFilename()` 移除桌號中的非法字元（`/ \ : * ? " < > |`），其餘 Unicode（含中文）保留。
+
+---
+
 ## [v1.2.12] - 2026-06-03
 
 **versionCode:** 20 · **下載：** [GitHub Release](https://github.com/bjoe0201/POS_ANDROID_2026/releases/tag/v1.2.12)

@@ -57,6 +57,8 @@ data class OrderUiState(
     val qtyRepeatInitialDelayMs: Int = 1000,
     val hapticEnabled: Boolean = true,
     val printCheckoutEnabled: Boolean = false,
+    val pdfPrinterEnabled: Boolean = false,
+    val pdfPrinterTreeUri: String = "",
     val errorMessage: String? = null,
     /** 補登模式：selectedDate 不是今日 */
     val isBackfillMode: Boolean = false
@@ -140,6 +142,12 @@ class OrderViewModel @Inject constructor(
             .launchIn(viewModelScope)
         settingsRepository.printCheckoutEnabled
             .onEach { v -> _uiState.update { it.copy(printCheckoutEnabled = v) } }
+            .launchIn(viewModelScope)
+        settingsRepository.pdfPrinterEnabled
+            .onEach { v -> _uiState.update { it.copy(pdfPrinterEnabled = v) } }
+            .launchIn(viewModelScope)
+        settingsRepository.pdfPrinterTreeUri
+            .onEach { v -> _uiState.update { it.copy(pdfPrinterTreeUri = v) } }
             .launchIn(viewModelScope)
 
         startDateRolloverObserver()

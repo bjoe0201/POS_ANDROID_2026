@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import com.pos.app.util.ReportPdfBuilder
 import com.pos.app.util.UsbPrinterManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -571,6 +572,8 @@ private fun PrinterSection(
     }
     var statusMsg by remember { mutableStateOf("") }
     var isTesting by remember { mutableStateOf(false) }
+    var isPdfTesting by remember { mutableStateOf(false) }
+    var pdfTestMsg by remember { mutableStateOf("") }
 
     fun runTest() {
         isTesting = true
@@ -749,6 +752,50 @@ private fun PrinterSection(
                             shape = RoundedCornerShape(8.dp)
                         ) { Text("還原預設", color = t.textSub, fontSize = 12.sp) }
                     }
+                }
+                OutlinedButton(
+                    onClick = {
+                        if (!isPdfTesting) {
+                            isPdfTesting = true
+                            pdfTestMsg = ""
+                            scope.launch {
+                                val result = if (pdfPrinterTreeUri.isNotBlank()) {
+                                    ReportPdfBuilder.buildTestPdfToTreeUri(
+                                        context, android.net.Uri.parse(pdfPrinterTreeUri)
+                                    )
+                                } else {
+                                    ReportPdfBuilder.buildTestPdfToDownloads(context)
+                                }
+                                pdfTestMsg = if (result.isSuccess) "✓ 測試 PDF 已儲存至 $folderDesc"
+                                             else "✗ 失敗：${result.exceptionOrNull()?.message ?: "未知錯誤"}"
+                                isPdfTesting = false
+                            }
+                        }
+                    },
+                    enabled = !isPdfTesting,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, t.accent),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    if (isPdfTesting) {
+                        CircularProgressIndicator(
+                            modifier = androidx.compose.ui.Modifier.size(14.dp),
+                            strokeWidth = 2.dp,
+                            color = t.accent
+                        )
+                        Spacer(androidx.compose.ui.Modifier.width(6.dp))
+                    }
+                    Text(
+                        "測試PDF檔存檔",
+                        color = if (isPdfTesting) t.textMuted else t.accent,
+                        fontSize = 12.sp
+                    )
+                }
+                if (pdfTestMsg.isNotEmpty()) {
+                    Text(
+                        pdfTestMsg,
+                        color = if (pdfTestMsg.startsWith("✓")) t.success else t.error,
+                        fontSize = 12.sp
+                    )
                 }
             }
         }

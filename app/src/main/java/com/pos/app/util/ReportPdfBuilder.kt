@@ -22,6 +22,16 @@ import java.util.Locale
  */
 object ReportPdfBuilder {
 
+    /** 單筆結帳收據所需資料。 */
+    data class ReceiptData(
+        val orderId: Long,
+        val tableName: String,
+        val createdAt: Long,
+        val remark: String,
+        val items: List<Triple<String, Int, Double>>,  // name, quantity, unitPrice
+        val total: Double
+    )
+
     private const val PAGE_W = 595   // A4 寬度（72dpi 點）
     private const val PAGE_H = 842   // A4 高度（72dpi 點）
     private const val MARGIN = 40f
@@ -150,6 +160,115 @@ object ReportPdfBuilder {
             build(context, file.uri, state, includeOrderDetails).getOrThrow()
         }
     }
+
+    /** 將測試 PDF 存入系統「下載」目錄。檔名格式：test-yyyyMMdd-HHmmss.pdf。 */
+    suspend fun buildTestPdfToDownloads(context: Context): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val ts = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(Date())
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, "test-$ts.pdf")
+                put(MediaStore.Downloads.MIME_TYPE, "application/pdf")
+            }
+            val uri = context.contentResolver.insert(
+                MediaStore.Downloads.EXTERNAL_CONTENT_URI, values
+            ) ?: error("無法在下載目錄建立 PDF 檔案")
+            buildTestPdf(context, uri).getOrThrow()
+        }
+    }
+
+    /** 將測試 PDF 存入 [treeUri] 所代表的 SAF 資料夾。 */
+    suspend fun buildTestPdfToTreeUri(context: Context, treeUri: Uri): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val dir = DocumentFile.fromTreeUri(context, treeUri) ?: error("無法開啟 PDF 存檔目錄")
+            val ts = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(Date())
+            val file = dir.createFile("application/pdf", "test-$ts") ?: error("無法在目錄中建立 PDF 檔案")
+            buildTestPdf(context, file.uri).getOrThrow()
+        }
+    }
+
+    private suspend fun buildTestPdf(context: Context, uri: Uri): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val document = PdfDocument()
+            try {
+                val r = Renderer(document)
+                val timeFmt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                r.title("PDF 存檔測試")
+                r.body("此為自動產生的測試檔案，可安全刪除。")
+                r.body("產生時間：${timeFmt.format(Date())}")
+                r.gap()
+                r.section("測試項目")
+                r.row("PDF 建立", "✓ 成功")
+                r.row("目錄寫入", "✓ 成功")
+                r.finish()
+                context.contentResolver.openOutputStream(uri)?.use { document.writeTo(it) }
+                    ?: error("無法開啟輸出串流")
+            } finally {
+                document.close()
+            }
+        }
+    }
+
+    /** 將結帳收據 PDF 存入系統「下載」目錄。檔名格式：receipt-yyyyMMdd-HHmmss-{訂單號}-{桌號}.pdf。 */
+    suspend fun buildReceiptToDownloads(context: Context, data: ReceiptData): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val ts = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(Date())
+                val name = "receipt-$ts-${data.orderId}-${sanitizeFilename(data.tableName)}"
+                val values = ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, "$name.pdf")
+                    put(MediaStore.Downloads.MIME_TYPE, "application/pdf")
+                }
+                val uri = context.contentResolver.insert(
+                    MediaStore.Downloads.EXTERNAL_CONTENT_URI, values
+                ) ?: error("無法在下載目錄建立 PDF 檔案")
+                buildReceipt(context, uri, data).getOrThrow()
+            }
+        }
+
+    /** 將結帳收據 PDF 存入 [treeUri] 所代表的 SAF 資料夾。 */
+    suspend fun buildReceiptToTreeUri(context: Context, treeUri: Uri, data: ReceiptData): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val dir = DocumentFile.fromTreeUri(context, treeUri)
+                    ?: error("無法開啟 PDF 存檔目錄")
+                val ts = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(Date())
+                val name = "receipt-$ts-${data.orderId}-${sanitizeFilename(data.tableName)}"
+                val file = dir.createFile("application/pdf", name)
+                    ?: error("無法在目錄中建立 PDF 檔案")
+                buildReceipt(context, file.uri, data).getOrThrow()
+            }
+        }
+
+    /** 移除檔名中不允許的字元（/ \ : * ? " < > |），其餘保留。 */
+    private fun sanitizeFilename(s: String): String =
+        s.replace(Regex("""[/\\:*?"<>|]"""), "_")
+
+    private suspend fun buildReceipt(context: Context, uri: Uri, data: ReceiptData): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val document = PdfDocument()
+                try {
+                    val r = Renderer(document)
+                    val timeFmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+                    r.title("收款收據")
+                    r.body("訂單 #${data.orderId}  ${data.tableName}")
+                    r.body("時間：${timeFmt.format(Date(data.createdAt))}")
+                    if (data.remark.isNotBlank()) r.body("備註：${data.remark}")
+                    r.gap()
+                    r.section("品項明細")
+                    data.items.forEach { (name, qty, price) ->
+                        r.row("  $name × $qty", "NT${"$"}%.0f".format(price * qty))
+                    }
+                    r.gap(4f)
+                    r.row("合計", "NT${"$"}%.0f".format(data.total))
+                    r.finish()
+                    context.contentResolver.openOutputStream(uri)?.use { document.writeTo(it) }
+                        ?: error("無法開啟輸出串流")
+                } finally {
+                    document.close()
+                }
+            }
+        }
 
     // ─────────────────────────────────────────────────────────────
     // 內部渲染器：管理多頁翻頁、提供語意化繪圖方法

@@ -41,6 +41,8 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.pos.app.data.db.entity.MenuItemEntity
+import android.net.Uri
+import com.pos.app.util.ReportPdfBuilder
 import com.pos.app.util.SoundEffects
 import com.pos.app.util.UsbPrinterManager
 import com.pos.app.data.db.entity.OrderItemEntity
@@ -168,6 +170,8 @@ fun OrderScreen(
                 val tOrderId = uiState.order?.id ?: 0L
                 val tCreatedAt = uiState.order?.createdAt ?: System.currentTimeMillis()
                 val shouldPrint = uiState.printCheckoutEnabled
+                val shouldSavePdf = uiState.pdfPrinterEnabled
+                val tPdfTreeUri = uiState.pdfPrinterTreeUri
                 viewModel.payOrder {
                     showCheckout = false
                     lastCheckout = tName.takeIf { it.isNotEmpty() }?.let { it to tTotal }
@@ -177,6 +181,23 @@ fun OrderScreen(
                             UsbPrinterManager.printCheckoutReceipt(
                                 context, tName, tItems, tTotal, tRemark, tOrderId, tCreatedAt
                             )
+                        }
+                    }
+                    if (shouldSavePdf) {
+                        scope.launch {
+                            val receiptData = ReportPdfBuilder.ReceiptData(
+                                orderId = tOrderId,
+                                tableName = tName,
+                                createdAt = tCreatedAt,
+                                remark = tRemark,
+                                items = tItems.map { Triple(it.name, it.quantity, it.price) },
+                                total = tTotal
+                            )
+                            if (tPdfTreeUri.isNotBlank()) {
+                                ReportPdfBuilder.buildReceiptToTreeUri(context, Uri.parse(tPdfTreeUri), receiptData)
+                            } else {
+                                ReportPdfBuilder.buildReceiptToDownloads(context, receiptData)
+                            }
                         }
                     }
                 }

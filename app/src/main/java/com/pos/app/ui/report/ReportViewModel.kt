@@ -250,25 +250,53 @@ class ReportViewModel @Inject constructor(
 
             val snapshot = buildReportPrintSnapshot(state, includeOrderDetails)
             _uiState.update { it.copy(isPrintingReport = true, message = null) }
-            val result = UsbPrinterManager.printReport(context.applicationContext, snapshot)
-            val usbMsg = if (result.isSuccess) "報表已送出列印"
-                         else "報表列印失敗：${result.exceptionOrNull()?.message ?: "未知錯誤"}"
-            // PDF 存檔獨立於 USB 列印，不管 USB 成功與否，只要開啟就存
-            val message = if (state.pdfPrinterEnabled) {
-                val pdfResult = if (state.pdfPrinterTreeUri.isNotBlank()) {
-                    ReportPdfBuilder.buildToTreeUri(
-                        context, Uri.parse(state.pdfPrinterTreeUri), state, includeOrderDetails
-                    )
+            try {
+                val result = UsbPrinterManager.printReport(context.applicationContext, snapshot)
+                val usbMsg = if (result.isSuccess) "報表已送出列印"
+                             else "報表列印失敗：${result.exceptionOrNull()?.message ?: "未知錯誤"}"
+                // PDF 存檔獨立於 USB 列印，不管 USB 成功與否，只要開啟就存
+                val message = if (state.pdfPrinterEnabled) {
+                    val pdfResult = if (state.pdfPrinterTreeUri.isNotBlank()) {
+                        ReportPdfBuilder.buildToTreeUri(
+                            context, Uri.parse(state.pdfPrinterTreeUri), state, includeOrderDetails
+                        )
+                    } else {
+                        ReportPdfBuilder.buildToDownloads(context, state, includeOrderDetails)
+                    }
+                    val pdfMsg = if (pdfResult.isSuccess) "PDF 已自動存檔"
+                                 else "PDF 存檔失敗：${pdfResult.exceptionOrNull()?.message ?: "未知錯誤"}"
+                    "$usbMsg，$pdfMsg"
                 } else {
-                    ReportPdfBuilder.buildToDownloads(context, state, includeOrderDetails)
+                    usbMsg
                 }
-                val pdfMsg = if (pdfResult.isSuccess) "PDF 已自動存檔"
-                             else "PDF 存檔失敗：${pdfResult.exceptionOrNull()?.message ?: "未知錯誤"}"
-                "$usbMsg，$pdfMsg"
-            } else {
-                usbMsg
+                _uiState.update { it.copy(isPrintingReport = false, message = message) }
+            } catch (e: Throwable) {
+                _uiState.update { it.copy(isPrintingReport = false, message = "列印發生錯誤：${e.message}") }
             }
-            _uiState.update { it.copy(isPrintingReport = false, message = message) }
+        }
+    }
+
+    fun savePdfNow(context: Context, includeOrderDetails: Boolean = true) {
+        viewModelScope.launch {
+            val state = _uiState.value
+            if (state.isLoading) {
+                _uiState.update { it.copy(message = "報表資料載入中，請稍候") }
+                return@launch
+            }
+            if (state.orders.isEmpty()) {
+                _uiState.update { it.copy(message = "此期間無資料可存檔") }
+                return@launch
+            }
+            val pdfResult = if (state.pdfPrinterTreeUri.isNotBlank()) {
+                ReportPdfBuilder.buildToTreeUri(
+                    context, Uri.parse(state.pdfPrinterTreeUri), state, includeOrderDetails
+                )
+            } else {
+                ReportPdfBuilder.buildToDownloads(context, state, includeOrderDetails)
+            }
+            val msg = if (pdfResult.isSuccess) "PDF 已存檔"
+                      else "PDF 存檔失敗：${pdfResult.exceptionOrNull()?.message ?: "未知錯誤"}"
+            _uiState.update { it.copy(message = msg) }
         }
     }
 

@@ -239,6 +239,8 @@ util/DatePickerDateUtils.kt        — Material3 DatePicker UTC 日期毫秒 ↔
 
 - `isBackfillMode: Boolean`：`selectedDate` 不是今日時為 `true`；記帳頁顯示紅色補登橫條。
 - `errorMessage: String?`：結帳失敗時的錯誤訊息，顯示於 `CheckoutDialog` 底部並透過 Snackbar 同步提示。
+- `pdfPrinterEnabled: Boolean`（v1.2.15）：同步自 DataStore，確認收款時判斷是否自動存收據 PDF。
+- `pdfPrinterTreeUri: String`（v1.2.15）：SAF tree URI；空白時存至系統下載目錄。
 
 ### ReportUiState 關鍵欄位（v1.2.7 新增）
 
@@ -259,6 +261,15 @@ util/DatePickerDateUtils.kt        — Material3 DatePicker UTC 日期毫秒 ↔
 `ReportViewModel.printCurrentReport(context)` 會以目前 `ReportUiState` 建立列印快照，呼叫 `UsbPrinterManager.printReport(...)` 透過 USB 熱感印表機列印相同篩選範圍的報表。`ReportUiState.isPrintingReport` 用於避免重複送印；`UsbPrinterManager` 會將長報表分段渲染為 Bitmap，降低單張 Bitmap 過高的風險。
 
 按鈕位於 `ReportScreen` 篩選區：`報表列印` 在 `匯出報表` 左側；自訂日期模式會分成日期套用列與報表動作列，避免小螢幕擁擠。若目前報表超過 10 筆且日期範圍超過 1 天，按下 `報表列印` 會先跳出確認，讓使用者選擇 `列印明細`、`只印總覽` 或取消，以避免誤印大量紙張。
+
+## PDF 存檔（ReportPdfBuilder）
+
+`util/ReportPdfBuilder.kt` 使用 Android 內建 `PdfDocument` API，不依賴第三方函式庫，輸出 A4 尺寸 PDF。
+
+- **報表 PDF**：`build / buildToDownloads / buildToTreeUri`（`ReportUiState` 驅動，含總覽、排行、明細）。
+- **收據 PDF**（v1.2.15）：`buildReceiptToDownloads / buildReceiptToTreeUri`，接受 `ReceiptData`（orderId、tableName、createdAt、remark、items、total）。檔名格式：`receipt-yyyyMMdd-HHmmss-{orderId}-{tableName}.pdf`；桌號中的非法字元由 `sanitizeFilename()` 替換為底線，中文保留。
+- **測試 PDF**（v1.2.15）：`buildTestPdfToDownloads / buildTestPdfToTreeUri`，產生示範用 `test-yyyyMMdd-HHmmss.pdf`。
+- **觸發時機**：報表列印時（`PDF_PRINTER_ENABLED=true`）自動儲存報表 PDF；確認收款時（`pdfPrinterEnabled=true`）自動儲存收據 PDF；設定頁「測試PDF檔存檔」按鈕可手動驗證目錄寫入。
 
 ## 排行圓餅圖
 

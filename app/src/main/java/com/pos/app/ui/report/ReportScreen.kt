@@ -363,6 +363,7 @@ fun ReportScreen(
                                 ReportActionButtons(
                                     uiState = uiState,
                                     onPrint = onReportPrintClick,
+                                    onSavePdf = { viewModel.savePdfNow(context) },
                                     onExport = { showExportDialog = true },
                                     t = t
                                 )
@@ -372,6 +373,7 @@ fun ReportScreen(
                             ReportActionButtons(
                                 uiState = uiState,
                                 onPrint = onReportPrintClick,
+                                onSavePdf = { viewModel.savePdfNow(context) },
                                 onExport = { showExportDialog = true },
                                 t = t
                             )
@@ -577,6 +579,7 @@ fun ReportScreen(
 private fun ReportActionButtons(
     uiState: ReportUiState,
     onPrint: () -> Unit,
+    onSavePdf: () -> Unit,
     onExport: () -> Unit,
     t: PosColors
 ) {
@@ -594,6 +597,17 @@ private fun ReportActionButtons(
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
         ) {
             Text(if (uiState.isPrintingReport) "列印中…" else "報表列印", fontSize = 13.sp)
+        }
+        if (uiState.pdfPrinterEnabled) {
+            Button(
+                onClick = onSavePdf,
+                enabled = actionEnabled,
+                colors = ButtonDefaults.buttonColors(containerColor = t.accent, disabledContainerColor = t.border),
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                Text("存PDF", fontSize = 13.sp)
+            }
         }
         Button(
             onClick = onExport,
