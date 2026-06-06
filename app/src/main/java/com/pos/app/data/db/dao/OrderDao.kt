@@ -27,6 +27,9 @@ interface OrderDao {
     @Query("UPDATE orders SET isDeleted = 1 WHERE id = :id")
     suspend fun softDelete(id: Long)
 
+    @Query("UPDATE orders SET isDeleted = 0 WHERE id = :id")
+    suspend fun undelete(id: Long)
+
     @Query("UPDATE orders SET status = :status, closedAt = :closedAt, remark = :remark WHERE id = :id")
     suspend fun closeOrder(id: Long, status: String, closedAt: Long, remark: String)
 

@@ -95,6 +95,8 @@ class OrderRepository @Inject constructor(
 
     suspend fun softDeleteOrder(orderId: Long) = orderDao.softDelete(orderId)
 
+    suspend fun restoreOrder(orderId: Long) = orderDao.undelete(orderId)
+
     suspend fun getAllOrderItems(): List<OrderItemEntity> = orderItemDao.getAllOrderItems()
 
     /**
