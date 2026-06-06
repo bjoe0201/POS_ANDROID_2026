@@ -37,68 +37,71 @@ object ReportPdfBuilder {
     ): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             val document = PdfDocument()
-            val r = Renderer(document)
-            val timeFmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+            try {
+                val r = Renderer(document)
+                val timeFmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
 
-            // ── 頁首 ──────────────────────────────────────────────
-            r.title("報表匯出")
-            r.body("產生時間：${timeFmt.format(Date())}")
-            r.body("含已刪除：${if (state.showDeleted) "是" else "否"}")
-            r.gap()
-
-            // ── 總覽 ──────────────────────────────────────────────
-            r.section("總覽")
-            r.row("總營業額", "NT${"$"}%.0f".format(state.totalRevenue))
-            r.row("總筆數", "${state.totalOrders} 筆")
-            r.row("平均客單", "NT${"$"}%.0f".format(state.avgOrderValue))
-            r.gap()
-
-            // ── 品項銷售排行 ──────────────────────────────────────
-            r.section("品項銷售排行")
-            if (state.itemRanking.isEmpty()) {
-                r.body("（無資料）")
-            } else {
-                state.itemRanking.forEachIndexed { i, (name, qty) ->
-                    r.row("${i + 1}. $name", "$qty 份")
-                }
-            }
-            r.gap()
-
-            // ── 群組銷售排行 ──────────────────────────────────────
-            r.section("群組銷售排行")
-            if (state.groupRanking.isEmpty()) {
-                r.body("（無資料）")
-            } else {
-                state.groupRanking.forEachIndexed { i, g ->
-                    r.row("${i + 1}. ${g.groupName}（${g.quantity}份）", "NT${"$"}%.0f".format(g.revenue))
-                }
-            }
-
-            // ── 訂單明細（可選）──────────────────────────────────
-            if (includeOrderDetails) {
+                // ── 頁首 ──────────────────────────────────────────────
+                r.title("報表匯出")
+                r.body("產生時間：${timeFmt.format(Date())}")
+                r.body("含已刪除：${if (state.showDeleted) "是" else "否"}")
                 r.gap()
-                r.section("訂單明細")
-                state.orders.forEach { owi ->
-                    val o = owi.order
-                    val tag = if (o.isDeleted) "  【已刪除】" else ""
-                    r.sub("#${o.id}  ${o.tableName}  ${timeFmt.format(Date(o.createdAt))}$tag")
-                    owi.items.forEach { item ->
-                        r.row(
-                            "  ${item.name} × ${item.quantity}",
-                            "NT${"$"}%.0f".format(item.price * item.quantity)
-                        )
+
+                // ── 總覽 ──────────────────────────────────────────────
+                r.section("總覽")
+                r.row("總營業額", "NT${"$"}%.0f".format(state.totalRevenue))
+                r.row("總筆數", "${state.totalOrders} 筆")
+                r.row("平均客單", "NT${"$"}%.0f".format(state.avgOrderValue))
+                r.gap()
+
+                // ── 品項銷售排行 ──────────────────────────────────────
+                r.section("品項銷售排行")
+                if (state.itemRanking.isEmpty()) {
+                    r.body("（無資料）")
+                } else {
+                    state.itemRanking.forEachIndexed { i, (name, qty) ->
+                        r.row("${i + 1}. $name", "$qty 份")
                     }
-                    val total = owi.items.sumOf { it.price * it.quantity }
-                    r.row("  小計", "NT${"$"}%.0f".format(total))
-                    r.gap(4f)
                 }
+                r.gap()
+
+                // ── 群組銷售排行 ──────────────────────────────────────
+                r.section("群組銷售排行")
+                if (state.groupRanking.isEmpty()) {
+                    r.body("（無資料）")
+                } else {
+                    state.groupRanking.forEachIndexed { i, g ->
+                        r.row("${i + 1}. ${g.groupName}（${g.quantity}份）", "NT${"$"}%.0f".format(g.revenue))
+                    }
+                }
+
+                // ── 訂單明細（可選）──────────────────────────────────
+                if (includeOrderDetails) {
+                    r.gap()
+                    r.section("訂單明細")
+                    state.orders.forEach { owi ->
+                        val o = owi.order
+                        val tag = if (o.isDeleted) "  【已刪除】" else ""
+                        r.sub("#${o.id}  ${o.tableName}  ${timeFmt.format(Date(o.createdAt))}$tag")
+                        owi.items.forEach { item ->
+                            r.row(
+                                "  ${item.name} × ${item.quantity}",
+                                "NT${"$"}%.0f".format(item.price * item.quantity)
+                            )
+                        }
+                        val total = owi.items.sumOf { it.price * it.quantity }
+                        r.row("  小計", "NT${"$"}%.0f".format(total))
+                        r.gap(4f)
+                    }
+                }
+
+                r.finish()
+
+                context.contentResolver.openOutputStream(uri)?.use { document.writeTo(it) }
+                    ?: error("無法開啟輸出串流")
+            } finally {
+                document.close()
             }
-
-            r.finish()
-
-            context.contentResolver.openOutputStream(uri)?.use { document.writeTo(it) }
-                ?: error("無法開啟輸出串流")
-            document.close()
         }
     }
 
@@ -106,7 +109,7 @@ object ReportPdfBuilder {
     // 內部渲染器：管理多頁翻頁、提供語意化繪圖方法
     // ─────────────────────────────────────────────────────────────
     private class Renderer(private val doc: PdfDocument) {
-        private var pageNum = 1
+        private var pageNum = 0
         private var pg: PdfDocument.Page = startPage()
         private var cv: Canvas = pg.canvas
         private var y = 60f
@@ -117,13 +120,13 @@ object ReportPdfBuilder {
         private val pBody    = Paint().apply { textSize = 11f; color = Color.BLACK }
 
         private fun startPage(): PdfDocument.Page {
-            val info = PdfDocument.PageInfo.Builder(PAGE_W, PAGE_H, pageNum++).create()
+            val info = PdfDocument.PageInfo.Builder(PAGE_W, PAGE_H, ++pageNum).create()
             return doc.startPage(info)
         }
 
         /** 當剩餘空間不足時翻到下一頁。 */
-        private fun checkOverflow() {
-            if (y + LINE_H > PAGE_H - MARGIN) {
+        private fun checkOverflow(neededSpace: Float = LINE_H) {
+            if (y + neededSpace > PAGE_H - MARGIN) {
                 doc.finishPage(pg)
                 pg = startPage()
                 cv = pg.canvas
@@ -132,13 +135,13 @@ object ReportPdfBuilder {
         }
 
         fun title(text: String) {
-            checkOverflow()
+            checkOverflow(LINE_H + 8f)
             cv.drawText(text, MARGIN, y, pTitle)
             y += LINE_H + 8f
         }
 
         fun section(text: String) {
-            checkOverflow()
+            checkOverflow(LINE_H + 4f)
             cv.drawText("| $text", MARGIN, y, pSection)
             y += LINE_H + 4f
         }
@@ -164,7 +167,10 @@ object ReportPdfBuilder {
             y += LINE_H
         }
 
-        fun gap(extra: Float = GAP) { y += extra }
+        fun gap(extra: Float = GAP) {
+            y += extra
+            if (y + LINE_H > PAGE_H - MARGIN) checkOverflow()
+        }
 
         /** 最後必須呼叫，將最後一頁結尾。 */
         fun finish() { doc.finishPage(pg) }
