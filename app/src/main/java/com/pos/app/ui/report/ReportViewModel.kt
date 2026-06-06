@@ -120,6 +120,10 @@ class ReportViewModel @Inject constructor(
         viewModelScope.launch { orderRepository.softDeleteOrder(orderId) }
     }
 
+    fun restoreOrder(orderId: Long) {
+        viewModelScope.launch { orderRepository.restoreOrder(orderId) }
+    }
+
     private suspend fun recompute(allOrders: List<OrderEntity>, range: DateRange, showDeleted: Boolean) {
         _uiState.update { it.copy(isLoading = true) }
         val (start, end) = resolveDateBounds(
@@ -329,7 +333,7 @@ class ReportViewModel @Inject constructor(
      *   3. 群組銷售排行
      *   4. 訂單明細（每筆訂單展開成多列品項）
      */
-    fun exportCsv(context: Context, uri: Uri) {
+    fun exportCsv(context: Context, uri: Uri, includeOrderDetails: Boolean = true) {
         viewModelScope.launch {
             val state = _uiState.value
             if (state.orders.isEmpty()) {
@@ -338,7 +342,7 @@ class ReportViewModel @Inject constructor(
             }
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    val content = buildReportCsv(state)
+                    val content = buildReportCsv(state, includeOrderDetails)
                     context.contentResolver.openOutputStream(uri)?.use { os ->
                         // UTF-8 BOM 讓 Excel 開啟中文不亂碼
                         os.write(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()))
@@ -354,7 +358,7 @@ class ReportViewModel @Inject constructor(
         }
     }
 
-    private fun buildReportCsv(state: ReportUiState): String {
+    private fun buildReportCsv(state: ReportUiState, includeOrderDetails: Boolean): String {
         val dateTimeFmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
         val (rangeLabel, rangeStr) = reportRangeText(state)
 
@@ -397,28 +401,30 @@ class ReportViewModel @Inject constructor(
         sb.appendLine()
 
         // 4. 訂單明細
-        line("===== 訂單明細 =====")
-        line("訂單ID", "桌號", "建立時間", "狀態", "已刪除", "品項", "群組", "數量", "單價", "小計")
-        state.orders.forEach { owi ->
-            val o = owi.order
-            val createdStr = dateTimeFmt.format(java.util.Date(o.createdAt))
-            val deletedFlag = if (o.isDeleted) "是" else ""
-            if (owi.items.isEmpty()) {
-                line(o.id, o.tableName, createdStr, o.status, deletedFlag, "", "", "", "", "")
-            } else {
-                owi.items.forEach { item ->
-                    line(
-                        o.id,
-                        o.tableName,
-                        createdStr,
-                        o.status,
-                        deletedFlag,
-                        item.name,
-                        item.menuGroupName,
-                        item.quantity,
-                        "%.0f".format(item.price),
-                        "%.0f".format(item.price * item.quantity)
-                    )
+        if (includeOrderDetails) {
+            line("===== 訂單明細 =====")
+            line("訂單ID", "桌號", "建立時間", "狀態", "已刪除", "品項", "群組", "數量", "單價", "小計")
+            state.orders.forEach { owi ->
+                val o = owi.order
+                val createdStr = dateTimeFmt.format(java.util.Date(o.createdAt))
+                val deletedFlag = if (o.isDeleted) "是" else ""
+                if (owi.items.isEmpty()) {
+                    line(o.id, o.tableName, createdStr, o.status, deletedFlag, "", "", "", "", "")
+                } else {
+                    owi.items.forEach { item ->
+                        line(
+                            o.id,
+                            o.tableName,
+                            createdStr,
+                            o.status,
+                            deletedFlag,
+                            item.name,
+                            item.menuGroupName,
+                            item.quantity,
+                            "%.0f".format(item.price),
+                            "%.0f".format(item.price * item.quantity)
+                        )
+                    }
                 }
             }
         }
