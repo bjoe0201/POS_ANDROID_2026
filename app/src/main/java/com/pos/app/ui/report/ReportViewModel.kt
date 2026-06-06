@@ -9,6 +9,7 @@ import com.pos.app.data.db.entity.OrderItemEntity
 
 import com.pos.app.data.repository.OrderRepository
 import com.pos.app.data.repository.SettingsRepository
+import com.pos.app.util.ReportPdfBuilder
 import com.pos.app.util.UsbPrinterManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -353,6 +354,26 @@ class ReportViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     message = if (result.isSuccess) "已匯出 ${state.orders.size} 筆訂單" else "匯出失敗：${result.exceptionOrNull()?.message ?: "未知錯誤"}"
+                )
+            }
+        }
+    }
+
+    fun exportPdf(context: Context, uri: Uri, includeOrderDetails: Boolean = true) {
+        viewModelScope.launch {
+            val state = _uiState.value
+            if (state.orders.isEmpty()) {
+                _uiState.update { it.copy(message = "此期間無資料可匯出") }
+                return@launch
+            }
+            val result = ReportPdfBuilder.build(context, uri, state, includeOrderDetails)
+            _uiState.update {
+                it.copy(
+                    message = if (result.isSuccess) {
+                        "已匯出 PDF（${state.orders.size} 筆訂單）"
+                    } else {
+                        "PDF 匯出失敗：${result.exceptionOrNull()?.message ?: "未知錯誤"}"
+                    }
                 )
             }
         }
