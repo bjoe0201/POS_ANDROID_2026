@@ -43,6 +43,8 @@ data class SettingsUiState(
     val printerTestPassed: Boolean = false,
     val printCheckoutEnabled: Boolean = false,
     val printDetailEnabled: Boolean = false,
+    val pdfPrinterEnabled: Boolean = false,
+    val pdfPrinterTreeUri: String = "",
     val message: String? = null
 )
 
@@ -155,6 +157,12 @@ class SettingsViewModel @Inject constructor(
             .launchIn(viewModelScope)
         settingsRepository.printDetailEnabled
             .onEach { v -> _uiState.update { it.copy(printDetailEnabled = v) } }
+            .launchIn(viewModelScope)
+        settingsRepository.pdfPrinterEnabled
+            .onEach { v -> _uiState.update { it.copy(pdfPrinterEnabled = v) } }
+            .launchIn(viewModelScope)
+        settingsRepository.pdfPrinterTreeUri
+            .onEach { v -> _uiState.update { it.copy(pdfPrinterTreeUri = v) } }
             .launchIn(viewModelScope)
     }
 
@@ -291,6 +299,24 @@ class SettingsViewModel @Inject constructor(
 
     fun setPrintDetailEnabled(v: Boolean) {
         viewModelScope.launch { settingsRepository.setPrintDetailEnabled(v) }
+    }
+
+    fun setPdfPrinterEnabled(v: Boolean) {
+        viewModelScope.launch { settingsRepository.setPdfPrinterEnabled(v) }
+    }
+
+    fun setPdfPrinterTreeUri(uri: String) {
+        viewModelScope.launch {
+            settingsRepository.setPdfPrinterTreeUri(uri)
+            _uiState.update { it.copy(message = "已設定 PDF 存檔目錄") }
+        }
+    }
+
+    fun clearPdfPrinterTreeUri() {
+        viewModelScope.launch {
+            settingsRepository.setPdfPrinterTreeUri("")
+            _uiState.update { it.copy(message = "已移除 PDF 存檔目錄") }
+        }
     }
 
     fun changePin(currentPin: String, newPin: String, confirmPin: String, onResult: (Boolean, String) -> Unit) {

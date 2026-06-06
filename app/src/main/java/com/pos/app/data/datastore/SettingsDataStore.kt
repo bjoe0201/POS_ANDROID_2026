@@ -41,6 +41,8 @@ class SettingsDataStore(private val context: Context) {
         private val PRINTER_TEST_PASSED    = booleanPreferencesKey("printer_test_passed")
         private val PRINT_CHECKOUT_ENABLED = booleanPreferencesKey("print_checkout_enabled")
         private val PRINT_DETAIL_ENABLED   = booleanPreferencesKey("print_detail_enabled")
+        private val PDF_PRINTER_ENABLED  = booleanPreferencesKey("pdf_printer_enabled")
+        private val PDF_PRINTER_TREE_URI = stringPreferencesKey("pdf_printer_tree_uri")
         private const val DEFAULT_PIN = "1234"
 
         fun hashPin(pin: String): String {
@@ -142,10 +144,14 @@ class SettingsDataStore(private val context: Context) {
     val printerTestPassed: Flow<Boolean>    = context.dataStore.data.map { it[PRINTER_TEST_PASSED] ?: false }
     val printCheckoutEnabled: Flow<Boolean> = context.dataStore.data.map { it[PRINT_CHECKOUT_ENABLED] ?: false }
     val printDetailEnabled: Flow<Boolean>   = context.dataStore.data.map { it[PRINT_DETAIL_ENABLED] ?: false }
+    val pdfPrinterEnabled: Flow<Boolean> = context.dataStore.data.map { it[PDF_PRINTER_ENABLED]  ?: false }
+    val pdfPrinterTreeUri: Flow<String>  = context.dataStore.data.map { it[PDF_PRINTER_TREE_URI] ?: "" }
 
     suspend fun setPrinterTestPassed(v: Boolean)    { context.dataStore.edit { it[PRINTER_TEST_PASSED] = v } }
     suspend fun setPrintCheckoutEnabled(v: Boolean) { context.dataStore.edit { it[PRINT_CHECKOUT_ENABLED] = v } }
     suspend fun setPrintDetailEnabled(v: Boolean)   { context.dataStore.edit { it[PRINT_DETAIL_ENABLED] = v } }
+    suspend fun setPdfPrinterEnabled(v: Boolean) { context.dataStore.edit { it[PDF_PRINTER_ENABLED]  = v } }
+    suspend fun setPdfPrinterTreeUri(v: String)  { context.dataStore.edit { it[PDF_PRINTER_TREE_URI] = v } }
 
     fun verifyPin(inputPin: String, storedHash: String): Boolean = hashPin(inputPin) == storedHash
 }

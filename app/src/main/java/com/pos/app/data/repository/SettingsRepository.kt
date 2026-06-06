@@ -31,6 +31,8 @@ class SettingsRepository @Inject constructor(private val dataStore: SettingsData
     val printerTestPassed: Flow<Boolean>    = dataStore.printerTestPassed
     val printCheckoutEnabled: Flow<Boolean> = dataStore.printCheckoutEnabled
     val printDetailEnabled: Flow<Boolean>   = dataStore.printDetailEnabled
+    val pdfPrinterEnabled: Flow<Boolean> = dataStore.pdfPrinterEnabled
+    val pdfPrinterTreeUri: Flow<String>  = dataStore.pdfPrinterTreeUri
 
     suspend fun setPin(newPin: String) = dataStore.setPin(newPin)
     fun verifyPin(input: String, hash: String) = dataStore.verifyPin(input, hash)
@@ -56,4 +58,6 @@ class SettingsRepository @Inject constructor(private val dataStore: SettingsData
     suspend fun setPrinterTestPassed(v: Boolean)    = dataStore.setPrinterTestPassed(v)
     suspend fun setPrintCheckoutEnabled(v: Boolean) = dataStore.setPrintCheckoutEnabled(v)
     suspend fun setPrintDetailEnabled(v: Boolean)   = dataStore.setPrintDetailEnabled(v)
+    suspend fun setPdfPrinterEnabled(v: Boolean) = dataStore.setPdfPrinterEnabled(v)
+    suspend fun setPdfPrinterTreeUri(v: String)  = dataStore.setPdfPrinterTreeUri(v)
 }
