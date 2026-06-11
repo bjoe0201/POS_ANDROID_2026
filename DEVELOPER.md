@@ -93,23 +93,100 @@
    keyPassword=你的key密碼
    ```
 
-3. 建置正式版：
-
-   ```bash
-   ./gradlew assembleRelease
-   # 輸出：app/build/outputs/apk/release/app-release.apk
-   ```
-
-4. 發佈前必須使用 Android SDK `apksigner` 驗證：
-
-   ```powershell
-   $apk = ".\app\build\outputs\apk\release\app-release.apk"
-   & $apksigner.FullName verify --verbose --print-certs $apk
-   ```
-
-   驗證結果需包含 `Verifies`、`Verified using v2 scheme ... true`、`Number of signers: 1`，且 signer certificate 不可為 `CN=Android Debug`。
-
 > ⚠️ 請妥善保管 `pos-release.jks` 與密碼，**遺失後無法更新已發佈的 App**。
+
+---
+
+## 自動化發佈腳本
+
+### scripts/release.ps1
+
+發佈流程統一由 `scripts/release.ps1` 處理，在專案根目錄以 PowerShell 執行：
+
+```powershell
+# 標準發佈（建置 → 驗簽 → Push → Release → 清除舊版）
+.\scripts\release.ps1
+
+# 已有 APK，跳過 Gradle 建置
+.\scripts\release.ps1 -SkipBuild
+
+# 跳過簽章驗證（測試用，正式發佈請勿使用）
+.\scripts\release.ps1 -SkipVerify
+```
+
+腳本執行順序：
+
+1. 從 `gradle.properties` 讀取版本號（`APP_VERSION_NAME` / `APP_VERSION_CODE`）
+2. 執行 `gradlew.bat assembleRelease -x lintVitalRelease`（見已知問題 #1）
+3. 以 `apksigner` 驗證 APK 簽章（見已知問題 #2、#3）
+4. 複製並重新命名 APK 為 `POS_ANDROID_2026-vX.Y.Z-release.apk`，輸出 SHA256
+5. `git push origin main`
+6. `gh release create` — release notes 自動從 `CHANGELOG.md` 擷取對應版本條目
+7. 刪除所有舊版 Release，僅保留最新
+
+### 已知問題與解決方案
+
+#### 問題 #1：`clean assembleRelease` 在 Windows 拋出 FileSystemException
+
+**現象：**
+```
+FAILURE: Build failed with an exception.
+Execution failed for task ':app:lintVitalRelease'.
+java.nio.file.FileSystemException: ...lint-cache\lintVitalAnalyzeRelease\migrated-jars\...jar:
+  程序無法存取檔案，因為檔案正由另一個程序使用。
+```
+
+**原因：** Gradle Daemon 或 Android Studio 佔用 lint cache 目錄內的 `.jar` 檔案，Windows 不允許刪除或覆寫被鎖定的檔案。
+
+**解法：** 不執行 `clean`；改以 `-x lintVitalRelease` 跳過 lint 任務。lint 問題不影響 APK 產出與安裝；如需完整 lint 報告，另行執行 `gradlew.bat lint`。
+
+```powershell
+# ❌ 容易失敗
+.\gradlew.bat clean assembleRelease
+
+# ✅ 穩定可用
+.\gradlew.bat assembleRelease -x lintVitalRelease
+```
+
+---
+
+#### 問題 #2：從 Bash 呼叫 PowerShell 執行 apksigner，`$` 變數轉義全壞
+
+**現象：** 在 Claude Code（Bash shell）中以下列方式呼叫 PowerShell，`$sdk`、`$apksigner` 等變數全部解析失敗：
+
+```bash
+# ❌ Bash 對 PowerShell 的 $ 、括號、backtick 轉義極為複雜
+powershell.exe -Command "$sdk = ...; $apksigner = ...; & $apksigner ..."
+```
+
+**原因：** Bash 會先對 `$`、`"`、`` ` `` 等字元做字串插值與轉義，PowerShell 收到的指令字串已面目全非。
+
+**解法：** 將 PowerShell 邏輯寫入 `.ps1` 檔案，再以 `-File` 模式執行，完全繞過 Bash 轉義問題：
+
+```bash
+# ✅ 寫成 .ps1 再執行
+powershell.exe -ExecutionPolicy Bypass -File "C:\...\verify_apk.ps1"
+```
+
+此為本腳本寫成 `.ps1` 而非在 Bash 中執行 PowerShell 指令的根本原因。
+
+---
+
+#### 問題 #3：PowerShell 動態解析 apksigner 路徑不穩定
+
+**現象：** 以下動態解析在某些環境下 `$sdk` 為空字串，導致 `Get-ChildItem` 找不到 `apksigner.bat`：
+
+```powershell
+# ❌ 有時 $sdk 解析結果為空
+$sdk = (Get-Content local.properties | Where-Object { $_ -like 'sdk.dir=*' } ...) -replace ...
+```
+
+**原因：** `sdk.dir` 路徑在不同機器上格式不一（正斜線 vs 反斜線、冒號前是否有空白），正規表示式替換邏輯易出錯。
+
+**解法（已在 release.ps1 實作）：**
+1. 先嘗試解析 `local.properties` 的 `sdk.dir`
+2. 解析失敗或路徑不存在時，fallback 到 `$env:LOCALAPPDATA\Android\Sdk`（Android Studio 標準安裝位置）
+3. 在 `build-tools\` 下用 `Get-ChildItem` 遞迴搜尋 `apksigner.bat`，取版本號最大的一個（`Sort-Object FullName -Descending`）
 
 ---
 
