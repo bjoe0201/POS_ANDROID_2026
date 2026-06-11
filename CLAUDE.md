@@ -197,7 +197,9 @@ ui/
   navigation/NavGraph.kt           — 根導航：Login → Home；Home 包含底部 6 個分頁的巢狀導航
   login / order / reservation / menu / table / report / settings / theme
 util/BackupManager.kt              — 透過 SAF（Storage Access Framework）進行 ZIP 備份匯出/匯入
-util/UsbPrinterManager.kt          — USB 熱感印表機列印（測試頁、收款收據、訂單明細、報表列印）
+util/PrinterDevice.kt              — sealed class Usb(UsbDevice) / Bt(BluetoothDevice)，統一印表機裝置模型
+util/PrinterManager.kt             — 統一掃描（USB+已配對BT）、裝置解析、列印路由；BT 使用 SPP BluetoothSocket
+util/UsbPrinterManager.kt          — USB ESC/POS 列印核心（測試頁、收款收據、訂單明細、報表）；buildXxxBytes/sendToDevice 為 internal
 util/DatePickerDateUtils.kt        — Material3 DatePicker UTC 日期毫秒 ↔ 本機日期日界線轉換
 ```
 
@@ -233,7 +235,7 @@ util/DatePickerDateUtils.kt        — Material3 DatePicker UTC 日期毫秒 ↔
 - 預設桌號：8 張（預植入為「1號桌」至「8號桌」）；可於 TableSettingScreen 進行 CRUD 調整。
 - **日期選擇器時區轉換**：Material3 `DatePicker` 的 `selectedDateMillis` / `initialSelectedDateMillis` 是 UTC 日期午夜；App 內部日期狀態使用本機日界線 millis。所有 DatePicker 進出都必須透過 `DatePickerDateUtils`，避免台灣時區今天顯示成昨天。
 - **長按連續加減**：記帳頁 `+` / `−` 按鈕長按超過 `qty_repeat_initial_delay_ms`（預設 1000ms）後，依 `qty_repeat_interval_ms`（預設 100ms）連續觸發；按住或單擊時卡片上方以 Popup 顯示數字氣泡（+ 亮黃 / − 亮綠），單擊放開後保留 600ms 才隱藏。觸覺回饋可於設定 `haptic_enabled` 整體開關，使用 `LocalHapticFeedback`。實作位於 `OrderScreen.kt` 的 `RepeatableQtyButton` 與 `MenuCard`。
-- **DataStore keys**（`SettingsDataStore`）：含 PIN、Tab 開關、營業時間、訂位、自動備份，以及 `QTY_REPEAT_INTERVAL_MS` / `QTY_REPEAT_INITIAL_DELAY_MS`（點餐長按連續加減速度／啟動延遲）、`HAPTIC_ENABLED`（觸覺回饋開關，預設開啟）、`PRINTER_TEST_PASSED`（印表機測試已通過）、`PRINT_CHECKOUT_ENABLED`（收款結帳自動列印）、`PRINT_DETAIL_ENABLED`（報表明細列印按鈕）、`CLOUD_BACKUP_ENABLED`（雲端備份開關，預設關閉）、`CLOUD_BACKUP_TREE_URI`（雲端備份 SAF tree URI）、`PDF_PRINTER_ENABLED`（PDF列印機自動存放開關，預設關閉）、`PDF_PRINTER_TREE_URI`（PDF 自動存檔目錄 SAF tree URI）。
+- **DataStore keys**（`SettingsDataStore`）：含 PIN、Tab 開關、營業時間、訂位、自動備份，以及 `QTY_REPEAT_INTERVAL_MS` / `QTY_REPEAT_INITIAL_DELAY_MS`（點餐長按連續加減速度／啟動延遲）、`HAPTIC_ENABLED`（觸覺回饋開關，預設開啟）、`PRINTER_TEST_PASSED`（印表機測試已通過）、`PRINT_CHECKOUT_ENABLED`（收款結帳自動列印）、`PRINT_DETAIL_ENABLED`（報表明細列印按鈕）、`CLOUD_BACKUP_ENABLED`（雲端備份開關，預設關閉）、`CLOUD_BACKUP_TREE_URI`（雲端備份 SAF tree URI）、`PDF_PRINTER_ENABLED`（PDF列印機自動存放開關，預設關閉）、`PDF_PRINTER_TREE_URI`（PDF 自動存檔目錄 SAF tree URI）、`SELECTED_PRINTER_TYPE`（已選印表機類型：`"usb"` / `"bt"` / `""`）、`SELECTED_PRINTER_ID`（USB deviceName 或 BT MAC address）。
 
 ### OrderUiState 關鍵欄位（v1.2.7 新增）
 
@@ -241,6 +243,8 @@ util/DatePickerDateUtils.kt        — Material3 DatePicker UTC 日期毫秒 ↔
 - `errorMessage: String?`：結帳失敗時的錯誤訊息，顯示於 `CheckoutDialog` 底部並透過 Snackbar 同步提示。
 - `pdfPrinterEnabled: Boolean`（v1.2.15）：同步自 DataStore，確認收款時判斷是否自動存收據 PDF。
 - `pdfPrinterTreeUri: String`（v1.2.15）：SAF tree URI；空白時存至系統下載目錄。
+- `selectedPrinterType: String`（v1.2.16）：`"usb"` / `"bt"` / `""`，由 `SettingsRepository.selectedPrinterType` 訂閱。
+- `selectedPrinterId: String`（v1.2.16）：USB deviceName 或 BT MAC address。
 
 ### ReportUiState 關鍵欄位（v1.2.7 新增）
 

@@ -36,6 +36,7 @@ import com.pos.app.ui.theme.PosColors
 import com.pos.app.util.datePickerUtcMillisToLocalStartOfDayMillis
 import com.pos.app.util.localDateMillisToDatePickerUtcMillis
 import com.pos.app.util.localTodayToDatePickerUtcMillis
+import com.pos.app.util.PrinterManager
 import com.pos.app.util.UsbPrinterManager
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -566,6 +567,8 @@ fun ReportScreen(
                             onDelete = { confirmDeleteId = owi.order.id },
                             onRestore = { confirmRestoreId = owi.order.id },
                             printDetailEnabled = uiState.printDetailEnabled,
+                            selectedPrinterType = uiState.selectedPrinterType,
+                            selectedPrinterId = uiState.selectedPrinterId,
                             t = t
                         )
                     }
@@ -733,6 +736,8 @@ private fun OrderSummaryRow(
     onDelete: () -> Unit,
     onRestore: () -> Unit,
     printDetailEnabled: Boolean,
+    selectedPrinterType: String,
+    selectedPrinterId: String,
     t: PosColors
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -811,14 +816,22 @@ private fun OrderSummaryRow(
                 OutlinedButton(
                     onClick = {
                         scope.launch {
-                            UsbPrinterManager.printOrderDetail(
-                                context = context,
-                                orderId = owi.order.id,
-                                tableName = owi.order.tableName,
-                                createdAt = owi.order.createdAt,
-                                items = owi.items,
-                                total = total
+                            val printer = PrinterManager.resolveDevice(
+                                context,
+                                selectedPrinterType,
+                                selectedPrinterId
                             )
+                            if (printer != null) {
+                                PrinterManager.printOrderDetail(
+                                    context = context,
+                                    printer = printer,
+                                    orderId = owi.order.id,
+                                    tableName = owi.order.tableName,
+                                    createdAt = owi.order.createdAt,
+                                    items = owi.items,
+                                    total = total
+                                )
+                            }
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),

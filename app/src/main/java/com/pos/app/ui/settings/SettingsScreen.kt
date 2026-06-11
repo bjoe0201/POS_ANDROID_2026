@@ -1,9 +1,12 @@
 ﻿package com.pos.app.ui.settings
 
+import android.Manifest
 import android.os.Build
 import android.webkit.WebView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import com.pos.app.util.PrinterDevice
+import com.pos.app.util.PrinterManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -378,11 +381,7 @@ fun SettingsScreen(
                     t = t,
                     snackbarHostState = snackbarHostState,
                     viewModel = viewModel,
-                    printerTestPassed = uiState.printerTestPassed,
-                    printCheckoutEnabled = uiState.printCheckoutEnabled,
-                    printDetailEnabled = uiState.printDetailEnabled,
-                    pdfPrinterEnabled = uiState.pdfPrinterEnabled,
-                    pdfPrinterTreeUri = uiState.pdfPrinterTreeUri
+                    uiState = uiState
                 )
 
                 // Backup section
@@ -548,14 +547,23 @@ private fun PrinterSection(
     t: PosColors,
     snackbarHostState: SnackbarHostState,
     viewModel: SettingsViewModel,
-    printerTestPassed: Boolean,
-    printCheckoutEnabled: Boolean,
-    printDetailEnabled: Boolean,
-    pdfPrinterEnabled: Boolean,
-    pdfPrinterTreeUri: String
+    uiState: SettingsUiState,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    val printerTestPassed = uiState.printerTestPassed
+    val printCheckoutEnabled = uiState.printCheckoutEnabled
+    val printDetailEnabled = uiState.printDetailEnabled
+    val pdfPrinterEnabled = uiState.pdfPrinterEnabled
+    val pdfPrinterTreeUri = uiState.pdfPrinterTreeUri
+
+    // Validate saved printer on first composition
+    LaunchedEffect(Unit) {
+        viewModel.validateSavedPrinter(context)
+    }
+
+    // PDF folder picker
     val pickPdfFolderLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
@@ -570,53 +578,256 @@ private fun PrinterSection(
             viewModel.setPdfPrinterTreeUri(uri.toString())
         }
     }
+
+    // Bluetooth permission launcher (API 31+)
+    val btPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            viewModel.scanPrinters(context)
+        }
+    }
+
+    // Test print state
     var statusMsg by remember { mutableStateOf("") }
     var isTesting by remember { mutableStateOf(false) }
+
+    // PDF test state
     var isPdfTesting by remember { mutableStateOf(false) }
     var pdfTestMsg by remember { mutableStateOf("") }
 
-    fun runTest() {
+    fun startScan() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (android.content.pm.PackageManager.PERMISSION_GRANTED !=
+                context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)
+            ) {
+                btPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                return
+            }
+        }
+        viewModel.scanPrinters(context)
+    }
+
+    fun runTestPrint() {
         isTesting = true
-        statusMsg = "正在搜尋 USB 裝置…"
+        statusMsg = "正在解析裝置…"
         scope.launch {
-            val device = withContext(Dispatchers.IO) { UsbPrinterManager.findPrinterDevice(context) }
-            if (device == null) {
-                statusMsg = "未偵測到 USB 裝置，請確認連接與 OTG 設定。"
+            val printer = withContext(Dispatchers.IO) {
+                PrinterManager.resolveDevice(context, uiState.selectedPrinterType, uiState.selectedPrinterId)
+            }
+            if (printer == null) {
+                statusMsg = "裝置已無法使用，請重新偵測"
                 isTesting = false
                 return@launch
             }
-            statusMsg = "找到裝置：${device.productName ?: device.deviceName}" +
-                    "\nVendorID=0x${"%04X".format(device.vendorId)}  ProductID=0x${"%04X".format(device.productId)}"
 
             suspend fun doTest() {
-                statusMsg += "\n已有權限，開始列印…"
-                val result = UsbPrinterManager.printTestPage(context, device)
+                statusMsg = "開始列印…"
+                val result = withContext(Dispatchers.IO) {
+                    PrinterManager.printTestPage(context, printer)
+                }
                 if (result.isSuccess) {
-                    statusMsg += "\n列印成功！"
+                    statusMsg = "測試列印成功！"
                     viewModel.setPrinterTestPassed(true)
                 } else {
-                    statusMsg += "\n列印失敗：${result.exceptionOrNull()?.message}"
+                    statusMsg = "列印失敗：${result.exceptionOrNull()?.message}"
                 }
                 isTesting = false
             }
 
-            if (!UsbPrinterManager.hasPermission(context, device)) {
-                statusMsg += "\n正在請求 USB 權限…"
-                UsbPrinterManager.requestPermission(context, device) { granted ->
-                    scope.launch {
-                        if (!granted) { statusMsg += "\n權限被拒絕。"; isTesting = false; return@launch }
+            when (printer) {
+                is PrinterDevice.Usb -> {
+                    if (!PrinterManager.hasUsbPermission(context, printer.device)) {
+                        statusMsg = "正在請求 USB 權限…"
+                        PrinterManager.requestUsbPermission(context, printer.device) { granted ->
+                            scope.launch {
+                                if (!granted) {
+                                    statusMsg = "USB 權限被拒絕。"
+                                    isTesting = false
+                                    return@launch
+                                }
+                                doTest()
+                            }
+                        }
+                    } else {
                         doTest()
                     }
                 }
-            } else {
-                doTest()
+                is PrinterDevice.Bt -> {
+                    doTest()
+                }
             }
         }
     }
 
     SectionCard(title = "印表機", t = t) {
-        Text("USB 熱感印表機（ESC/POS），請先以 USB 連接 EPSON TM-T70 後點「測試列印」。", color = t.textMuted, fontSize = 13.sp)
-        if (statusMsg.isNotEmpty()) {
+
+        // ── 已選裝置 ──────────────────────────────────────────────────────────
+        Text("連接印表機並偵測，選擇裝置後執行測試列印。", color = t.textMuted, fontSize = 13.sp)
+        Spacer(Modifier.height(8.dp))
+
+        if (uiState.selectedPrinterType.isBlank()) {
+            Text("尚未選擇印表機", color = t.textMuted, fontSize = 13.sp)
+        } else {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(t.surface)
+                    .border(1.dp, t.border, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "[${uiState.selectedPrinterType}] ${uiState.selectedPrinterName}",
+                        color = t.text,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    if (uiState.selectedPrinterId.isNotBlank()) {
+                        Text(uiState.selectedPrinterId, color = t.textMuted, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    }
+                }
+                TextButton(onClick = { viewModel.clearSelectedPrinter() }) {
+                    Text("重新選擇", color = t.accent, fontSize = 13.sp)
+                }
+            }
+        }
+
+        if (uiState.selectedPrinterError != null) {
+            Spacer(Modifier.height(4.dp))
+            Text(uiState.selectedPrinterError, color = Color(0xFFFF9800), fontSize = 12.sp)
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        // ── 偵測印表機 ────────────────────────────────────────────────────────
+        Button(
+            onClick = { startScan() },
+            enabled = !uiState.isScanning,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = t.accent),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            if (uiState.isScanning) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), color = t.text, strokeWidth = 2.dp)
+                Spacer(Modifier.width(8.dp))
+                Text("偵測中…", fontWeight = FontWeight.SemiBold)
+            } else {
+                Text("偵測印表機", fontWeight = FontWeight.SemiBold)
+            }
+        }
+
+        // ── 偵測結果清單 ──────────────────────────────────────────────────────
+        if (!uiState.isScanning && uiState.scannedDevices.isEmpty() &&
+            (uiState.selectedPrinterType.isBlank() || statusMsg.isNotEmpty())
+        ) {
+            // Only show "no device" hint if a scan was attempted (statusMsg touched) or list explicitly empty
+        }
+
+        val usbDevices = uiState.scannedDevices.filterIsInstance<PrinterDevice.Usb>()
+        val btDevices = uiState.scannedDevices.filterIsInstance<PrinterDevice.Bt>()
+
+        if (uiState.scannedDevices.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(t.surface)
+                    .border(1.dp, t.border, RoundedCornerShape(8.dp))
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (usbDevices.isNotEmpty()) {
+                    Text("USB 裝置", color = t.textMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    usbDevices.forEach { device ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(t.card)
+                                .border(1.dp, t.border, RoundedCornerShape(6.dp))
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(t.accentDim2)
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(device.typeLabel, color = t.accent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Text(device.displayName, color = t.text, fontSize = 13.sp)
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    PrinterManager.requestUsbPermission(context, device.device) { granted ->
+                                        if (granted) viewModel.selectPrinter(device)
+                                    }
+                                },
+                                border = androidx.compose.foundation.BorderStroke(1.dp, t.accent),
+                                shape = RoundedCornerShape(6.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                            ) { Text("選擇", color = t.accent, fontSize = 12.sp) }
+                        }
+                    }
+                }
+                if (btDevices.isNotEmpty()) {
+                    if (usbDevices.isNotEmpty()) Spacer(Modifier.height(4.dp))
+                    Text("藍芽裝置", color = t.textMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    btDevices.forEach { device ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(t.card)
+                                .border(1.dp, t.border, RoundedCornerShape(6.dp))
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(t.accentDim2)
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(device.typeLabel, color = t.accent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Text(device.displayName, color = t.text, fontSize = 13.sp)
+                            }
+                            OutlinedButton(
+                                onClick = { viewModel.selectPrinter(device) },
+                                border = androidx.compose.foundation.BorderStroke(1.dp, t.accent),
+                                shape = RoundedCornerShape(6.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                            ) { Text("選擇", color = t.accent, fontSize = 12.sp) }
+                        }
+                    }
+                }
+            }
+        } else if (!uiState.isScanning && uiState.scannedDevices.isEmpty() && statusMsg == "scan_done_empty") {
+            Spacer(Modifier.height(8.dp))
+            Text("未偵測到任何裝置", color = t.textMuted, fontSize = 13.sp)
+        }
+
+        // ── 測試列印狀態訊息 ──────────────────────────────────────────────────
+        if (statusMsg.isNotEmpty() && statusMsg != "scan_done_empty") {
             Spacer(Modifier.height(8.dp))
             Box(
                 modifier = Modifier
@@ -629,22 +840,26 @@ private fun PrinterSection(
                 Text(statusMsg, color = t.textSub, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
             }
         }
-        Spacer(Modifier.height(10.dp))
-        Button(
-            onClick = { runTest() },
-            enabled = !isTesting,
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = t.accent),
-            shape = RoundedCornerShape(8.dp)
-        ) {
-            if (isTesting) {
-                CircularProgressIndicator(modifier = Modifier.size(18.dp), color = t.text, strokeWidth = 2.dp)
-                Spacer(Modifier.width(8.dp))
+
+        // ── 測試列印按鈕（僅在已選裝置時顯示）────────────────────────────────
+        if (uiState.selectedPrinterType.isNotBlank()) {
+            Spacer(Modifier.height(10.dp))
+            Button(
+                onClick = { runTestPrint() },
+                enabled = !isTesting,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = t.accent),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                if (isTesting) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = t.text, strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(if (isTesting) "測試中…" else "測試列印", fontWeight = FontWeight.SemiBold)
             }
-            Text(if (isTesting) "測試中…" else "測試列印", fontWeight = FontWeight.SemiBold)
         }
 
-        // 列印功能開關（僅在測試通過後顯示）
+        // ── 列印功能開關（僅在測試通過後顯示）───────────────────────────────
         if (printerTestPassed) {
             Spacer(Modifier.height(14.dp))
             Box(Modifier.height(1.dp).fillMaxWidth().background(t.border))
@@ -691,7 +906,6 @@ private fun PrinterSection(
                     )
                 )
             }
-
         }
 
         // PDF 列印機（獨立功能，不需測試印表機）

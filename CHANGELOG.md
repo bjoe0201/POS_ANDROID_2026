@@ -13,6 +13,31 @@ _尚無未發佈變更。_
 
 ---
 
+## [v1.2.16] - 2026-06-11
+
+**versionCode:** 24 · **下載：** [GitHub Release](https://github.com/bjoe0201/POS_ANDROID_2026/releases/tag/v1.2.16)
+
+### 印表機偵測（USB + 藍芽）
+
+#### 新增項目
+
+- **印表機偵測掃描**：設定頁「印表機」區塊新增「偵測印表機」按鈕，自動掃描 USB 裝置與手機已配對的藍芽裝置，列成清單供使用者選擇。
+- **藍芽印表機支援**：支援透過 Classic Bluetooth SPP（Serial Port Profile）連接熱感印表機，列印收款收據、訂單明細與報表；ESC/POS 指令與 USB 路徑完全相同。
+- **印表機持久化記憶**：選定印表機後儲存至 DataStore（類型 + 裝置識別碼），下次開啟 App 自動使用上次的印表機；若裝置已消失則顯示警告提示重新偵測。
+- **換裝置重置測試狀態**：選擇新印表機後自動清除舊測試通過狀態，確保每台裝置都需重新驗證。
+
+#### 技術細節
+
+- 新增 `util/PrinterDevice.kt`：sealed class `Usb(UsbDevice)` / `Bt(BluetoothDevice)`，含 `displayName`、`typeKey`、`identifier`、`typeLabel`。
+- 新增 `util/PrinterManager.kt`：統一掃描（`scanPrinters`）、裝置解析（`resolveDevice`）、列印路由（USB 委派 `UsbPrinterManager`；BT 使用 `BluetoothSocket` SPP）。
+- `UsbPrinterManager` 的 `buildXxxBytes` / `sendToDevice` 改為 `internal`，供 `PrinterManager` 呼叫。
+- `SettingsDataStore` 新增 `selected_printer_type`、`selected_printer_id` DataStore key。
+- `SettingsViewModel` 新增 `scanPrinters` / `selectPrinter` / `clearSelectedPrinter` / `validateSavedPrinter`。
+- `AndroidManifest` 加入 `BLUETOOTH_CONNECT`（API 31+）、`BLUETOOTH` / `BLUETOOTH_ADMIN`（API < 31）權限。
+- `OrderScreen` / `ReportScreen` / `ReportViewModel` 改呼叫 `PrinterManager`；`OrderUiState` / `ReportUiState` 新增 `selectedPrinterType` / `selectedPrinterId`。
+
+---
+
 ## [v1.2.15] - 2026-06-06
 
 **versionCode:** 23 · **下載：** [GitHub Release](https://github.com/bjoe0201/POS_ANDROID_2026/releases/tag/v1.2.15)

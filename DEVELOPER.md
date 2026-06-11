@@ -202,6 +202,8 @@ util/DatePickerDateUtils.kt        — Material3 DatePicker UTC 日期毫秒 ↔
 | `PRINTER_TEST_PASSED` | 印表機測試已通過 |
 | `PRINT_CHECKOUT_ENABLED` | 收款結帳自動列印 |
 | `PRINT_DETAIL_ENABLED` | 報表明細列印按鈕 |
+| `SELECTED_PRINTER_TYPE` | 已選印表機類型（`"usb"` / `"bt"` / `""`） |
+| `SELECTED_PRINTER_ID` | 已選印表機識別碼（USB deviceName 或 BT MAC address） |
 
 ---
 
@@ -236,7 +238,7 @@ util/DatePickerDateUtils.kt        — Material3 DatePicker UTC 日期毫秒 ↔
 
 `ReportViewModel.exportCsv(context, uri)` 依當前 UI 篩選後的資料組裝多區段 CSV：**檔頭 → 總覽 → 品項銷售排行 → 群組銷售排行 → 訂單明細**。寫入 UTF-8 + BOM 給 Excel 中文直開。
 
-`ReportViewModel.printCurrentReport(context)` 會以目前 `ReportUiState` 建立列印快照，呼叫 `UsbPrinterManager.printReport(...)` 透過 USB 熱感印表機列印相同篩選範圍的報表。`ReportUiState.isPrintingReport` 用於避免重複送印；`UsbPrinterManager` 會將長報表分段渲染為 Bitmap，降低單張 Bitmap 過高的風險。
+`ReportViewModel.printCurrentReport(context)` 會以目前 `ReportUiState` 建立列印快照，呼叫 `PrinterManager.printReport(...)` 透過 USB 或藍芽熱感印表機列印相同篩選範圍的報表。`ReportUiState.isPrintingReport` 用於避免重複送印；`UsbPrinterManager` 會將長報表分段渲染為 Bitmap，降低單張 Bitmap 過高的風險。
 
 ---
 

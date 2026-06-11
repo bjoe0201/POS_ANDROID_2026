@@ -4,6 +4,14 @@
     <!-- USB Host (for receipt printer) -->
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
 
+    <!-- Bluetooth Classic (SPP printing) API < 31 -->
+    <uses-permission android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+    <!-- Bluetooth Classic API 31+ (list paired devices + connect) -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
     <application
         android:name=".POSApplication"
         android:allowBackup="true"

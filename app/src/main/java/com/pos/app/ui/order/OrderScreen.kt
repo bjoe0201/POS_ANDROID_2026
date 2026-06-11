@@ -44,6 +44,7 @@ import com.pos.app.data.db.entity.MenuItemEntity
 import android.net.Uri
 import com.pos.app.util.ReportPdfBuilder
 import com.pos.app.util.SoundEffects
+import com.pos.app.util.PrinterManager
 import com.pos.app.util.UsbPrinterManager
 import com.pos.app.data.db.entity.OrderItemEntity
 import com.pos.app.data.db.entity.TableEntity
@@ -172,15 +173,20 @@ fun OrderScreen(
                 val shouldPrint = uiState.printCheckoutEnabled
                 val shouldSavePdf = uiState.pdfPrinterEnabled
                 val tPdfTreeUri = uiState.pdfPrinterTreeUri
+                val tPrinterType = uiState.selectedPrinterType
+                val tPrinterId   = uiState.selectedPrinterId
                 viewModel.payOrder {
                     showCheckout = false
                     lastCheckout = tName.takeIf { it.isNotEmpty() }?.let { it to tTotal }
                     SoundEffects.playPaymentSuccess()
                     if (shouldPrint) {
                         scope.launch {
-                            UsbPrinterManager.printCheckoutReceipt(
-                                context, tName, tItems, tTotal, tRemark, tOrderId, tCreatedAt
-                            )
+                            val printer = PrinterManager.resolveDevice(context, tPrinterType, tPrinterId)
+                            if (printer != null) {
+                                PrinterManager.printCheckoutReceipt(
+                                    context, printer, tName, tItems, tTotal, tRemark, tOrderId, tCreatedAt
+                                )
+                            }
                         }
                     }
                     if (shouldSavePdf) {

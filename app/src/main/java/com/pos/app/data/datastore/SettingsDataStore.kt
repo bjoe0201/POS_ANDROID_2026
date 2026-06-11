@@ -43,6 +43,8 @@ class SettingsDataStore(private val context: Context) {
         private val PRINT_DETAIL_ENABLED   = booleanPreferencesKey("print_detail_enabled")
         private val PDF_PRINTER_ENABLED  = booleanPreferencesKey("pdf_printer_enabled")
         private val PDF_PRINTER_TREE_URI = stringPreferencesKey("pdf_printer_tree_uri")
+        private val SELECTED_PRINTER_TYPE = stringPreferencesKey("selected_printer_type")
+        private val SELECTED_PRINTER_ID   = stringPreferencesKey("selected_printer_id")
         private const val DEFAULT_PIN = "1234"
 
         fun hashPin(pin: String): String {
@@ -152,6 +154,24 @@ class SettingsDataStore(private val context: Context) {
     suspend fun setPrintDetailEnabled(v: Boolean)   { context.dataStore.edit { it[PRINT_DETAIL_ENABLED] = v } }
     suspend fun setPdfPrinterEnabled(v: Boolean) { context.dataStore.edit { it[PDF_PRINTER_ENABLED]  = v } }
     suspend fun setPdfPrinterTreeUri(v: String)  { context.dataStore.edit { it[PDF_PRINTER_TREE_URI] = v } }
+
+    // ── 選定印表機 ──
+    val selectedPrinterType: Flow<String> = context.dataStore.data.map { it[SELECTED_PRINTER_TYPE] ?: "" }
+    val selectedPrinterId:   Flow<String> = context.dataStore.data.map { it[SELECTED_PRINTER_ID]   ?: "" }
+
+    suspend fun setSelectedPrinter(type: String, id: String) {
+        context.dataStore.edit {
+            it[SELECTED_PRINTER_TYPE] = type
+            it[SELECTED_PRINTER_ID]   = id
+        }
+    }
+
+    suspend fun clearSelectedPrinter() {
+        context.dataStore.edit {
+            it[SELECTED_PRINTER_TYPE] = ""
+            it[SELECTED_PRINTER_ID]   = ""
+        }
+    }
 
     fun verifyPin(inputPin: String, storedHash: String): Boolean = hashPin(inputPin) == storedHash
 }

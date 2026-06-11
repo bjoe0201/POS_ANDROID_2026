@@ -161,7 +161,7 @@ object UsbPrinterManager {
 
     // ── USB 傳輸 ─────────────────────────────────────────────────────────────
 
-    private fun sendToDevice(context: Context, device: UsbDevice, data: ByteArray) {
+    internal fun sendToDevice(context: Context, device: UsbDevice, data: ByteArray) {
         val mgr = context.getSystemService(Context.USB_SERVICE) as UsbManager
         var bulkIface: android.hardware.usb.UsbInterface? = null
         var bulkEp: android.hardware.usb.UsbEndpoint? = null
@@ -215,7 +215,7 @@ object UsbPrinterManager {
      *   選擇「最後一個右側 | 完整、且左端寬度數字也完整」的數值，
      *   填入 [PRINT_WIDTH_PX] 即為最佳列印寬度。
      */
-    private fun buildTestPageBytes(): ByteArray {
+    internal fun buildTestPageBytes(): ByteArray {
         val buf = mutableListOf<Byte>()
         fun b(vararg bytes: Int) = bytes.forEach { buf.add(it.toByte()) }
         fun str(s: String) = buf.addAll(s.toByteArray(Charsets.US_ASCII).toList())
@@ -298,7 +298,7 @@ object UsbPrinterManager {
 
     // ── Bitmap 收據 ──────────────────────────────────────────────────────────
 
-    private fun buildCheckoutBytes(
+    internal fun buildCheckoutBytes(
         tableName: String, items: List<OrderItemEntity>, total: Double, remark: String,
         orderId: Long, createdAt: Long
     ): ByteArray {
@@ -337,7 +337,7 @@ object UsbPrinterManager {
         return wrapBitmap(lines)
     }
 
-    private fun buildDetailBytes(
+    internal fun buildDetailBytes(
         orderId: Long, tableName: String, createdAt: Long,
         items: List<OrderItemEntity>, total: Double
     ): ByteArray {
@@ -359,7 +359,7 @@ object UsbPrinterManager {
         return wrapBitmap(lines)
     }
 
-    private fun buildReportBytes(snapshot: ReportPrintSnapshot): ByteArray {
+    internal fun buildReportBytes(snapshot: ReportPrintSnapshot): ByteArray {
         val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
         val lines = mutableListOf<RL>()
 

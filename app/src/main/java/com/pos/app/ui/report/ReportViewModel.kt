@@ -10,6 +10,7 @@ import com.pos.app.data.db.entity.OrderItemEntity
 import com.pos.app.data.repository.OrderRepository
 import com.pos.app.data.repository.SettingsRepository
 import com.pos.app.util.ReportPdfBuilder
+import com.pos.app.util.PrinterManager
 import com.pos.app.util.UsbPrinterManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -50,7 +51,9 @@ data class ReportUiState(
     /** 目前尚未結帳（OPEN）的訂單列表（Step 5） */
     val openOrders: List<OrderEntity> = emptyList(),
     val pdfPrinterEnabled: Boolean = false,
-    val pdfPrinterTreeUri: String = ""
+    val pdfPrinterTreeUri: String = "",
+    val selectedPrinterType: String = "",
+    val selectedPrinterId: String = ""
 )
 
 @HiltViewModel
@@ -81,6 +84,12 @@ class ReportViewModel @Inject constructor(
             .launchIn(viewModelScope)
         settingsRepository.pdfPrinterTreeUri
             .onEach { v -> _uiState.update { it.copy(pdfPrinterTreeUri = v) } }
+            .launchIn(viewModelScope)
+        settingsRepository.selectedPrinterType
+            .onEach { v -> _uiState.update { it.copy(selectedPrinterType = v) } }
+            .launchIn(viewModelScope)
+        settingsRepository.selectedPrinterId
+            .onEach { v -> _uiState.update { it.copy(selectedPrinterId = v) } }
             .launchIn(viewModelScope)
     }
 
@@ -251,7 +260,12 @@ class ReportViewModel @Inject constructor(
             val snapshot = buildReportPrintSnapshot(state, includeOrderDetails)
             _uiState.update { it.copy(isPrintingReport = true, message = null) }
             try {
-                val result = UsbPrinterManager.printReport(context.applicationContext, snapshot)
+                val printer = PrinterManager.resolveDevice(context.applicationContext, state.selectedPrinterType, state.selectedPrinterId)
+                val result = if (printer != null) {
+                    PrinterManager.printReport(context.applicationContext, printer, snapshot)
+                } else {
+                    Result.failure(Exception("未選擇印表機，請先在設定頁偵測並選擇印表機"))
+                }
                 val usbMsg = if (result.isSuccess) "報表已送出列印"
                              else "報表列印失敗：${result.exceptionOrNull()?.message ?: "未知錯誤"}"
                 // PDF 存檔獨立於 USB 列印，不管 USB 成功與否，只要開啟就存
