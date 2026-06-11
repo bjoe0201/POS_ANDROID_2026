@@ -59,6 +59,8 @@ data class OrderUiState(
     val printCheckoutEnabled: Boolean = false,
     val pdfPrinterEnabled: Boolean = false,
     val pdfPrinterTreeUri: String = "",
+    val selectedPrinterType: String = "",
+    val selectedPrinterId: String = "",
     val errorMessage: String? = null,
     /** 補登模式：selectedDate 不是今日 */
     val isBackfillMode: Boolean = false
@@ -148,6 +150,12 @@ class OrderViewModel @Inject constructor(
             .launchIn(viewModelScope)
         settingsRepository.pdfPrinterTreeUri
             .onEach { v -> _uiState.update { it.copy(pdfPrinterTreeUri = v) } }
+            .launchIn(viewModelScope)
+        settingsRepository.selectedPrinterType
+            .onEach { v -> _uiState.update { it.copy(selectedPrinterType = v) } }
+            .launchIn(viewModelScope)
+        settingsRepository.selectedPrinterId
+            .onEach { v -> _uiState.update { it.copy(selectedPrinterId = v) } }
             .launchIn(viewModelScope)
 
         startDateRolloverObserver()

@@ -10,10 +10,13 @@ import com.pos.app.data.repository.SettingsRepository
 import com.pos.app.util.AutoBackupManager
 import com.pos.app.util.BackupEntry
 import com.pos.app.util.BackupManager
+import com.pos.app.util.PrinterDevice
+import com.pos.app.util.PrinterManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 data class SettingsUiState(
@@ -45,6 +48,13 @@ data class SettingsUiState(
     val printDetailEnabled: Boolean = false,
     val pdfPrinterEnabled: Boolean = false,
     val pdfPrinterTreeUri: String = "",
+    // ── 印表機偵測 ──
+    val selectedPrinterType: String = "",
+    val selectedPrinterId: String = "",
+    val selectedPrinterName: String = "",
+    val selectedPrinterError: String? = null,
+    val scannedDevices: List<PrinterDevice> = emptyList(),
+    val isScanning: Boolean = false,
     val message: String? = null
 )
 
@@ -163,6 +173,12 @@ class SettingsViewModel @Inject constructor(
             .launchIn(viewModelScope)
         settingsRepository.pdfPrinterTreeUri
             .onEach { v -> _uiState.update { it.copy(pdfPrinterTreeUri = v) } }
+            .launchIn(viewModelScope)
+        settingsRepository.selectedPrinterType
+            .onEach { v -> _uiState.update { it.copy(selectedPrinterType = v) } }
+            .launchIn(viewModelScope)
+        settingsRepository.selectedPrinterId
+            .onEach { v -> _uiState.update { it.copy(selectedPrinterId = v) } }
             .launchIn(viewModelScope)
     }
 
@@ -316,6 +332,76 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.setPdfPrinterTreeUri("")
             _uiState.update { it.copy(message = "已移除 PDF 存檔目錄") }
+        }
+    }
+
+    // ── 印表機偵測 ──────────────────────────────────────────────────────────
+
+    /** 掃描可用的 USB + 已配對藍芽裝置。 */
+    fun scanPrinters(context: Context) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isScanning = true, scannedDevices = emptyList()) }
+            val devices = withContext(Dispatchers.IO) {
+                PrinterManager.scanPrinters(context)
+            }
+            _uiState.update { it.copy(isScanning = false, scannedDevices = devices) }
+        }
+    }
+
+    /** 使用者選定一台印表機，儲存至 DataStore 並重置測試狀態。 */
+    fun selectPrinter(printer: PrinterDevice) {
+        viewModelScope.launch {
+            settingsRepository.setSelectedPrinter(printer.typeKey, printer.identifier)
+            settingsRepository.setPrinterTestPassed(false)
+            _uiState.update {
+                it.copy(
+                    selectedPrinterType  = printer.typeKey,
+                    selectedPrinterId    = printer.identifier,
+                    selectedPrinterName  = printer.displayName,
+                    selectedPrinterError = null,
+                    printerTestPassed    = false,
+                    scannedDevices       = emptyList(),
+                )
+            }
+        }
+    }
+
+    /** 清除已選定的印表機。 */
+    fun clearSelectedPrinter() {
+        viewModelScope.launch {
+            settingsRepository.clearSelectedPrinter()
+            settingsRepository.setPrinterTestPassed(false)
+            _uiState.update {
+                it.copy(
+                    selectedPrinterType  = "",
+                    selectedPrinterId    = "",
+                    selectedPrinterName  = "",
+                    selectedPrinterError = null,
+                    printerTestPassed    = false,
+                )
+            }
+        }
+    }
+
+    /**
+     * 嘗試解析已儲存的印表機；若裝置已消失則設定錯誤訊息。
+     * 在 PrinterSection 首次載入時由 UI 呼叫。
+     */
+    fun validateSavedPrinter(context: Context) {
+        val type = _uiState.value.selectedPrinterType
+        val id   = _uiState.value.selectedPrinterId
+        if (type.isBlank()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val device = PrinterManager.resolveDevice(context, type, id)
+            if (device == null) {
+                _uiState.update {
+                    it.copy(selectedPrinterError = "上次選擇的印表機已無法使用，請重新偵測")
+                }
+            } else {
+                _uiState.update {
+                    it.copy(selectedPrinterName = device.displayName, selectedPrinterError = null)
+                }
+            }
         }
     }
 
