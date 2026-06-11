@@ -62,9 +62,9 @@ object ReportPdfBuilder {
 
                 // ── 總覽 ──────────────────────────────────────────────
                 r.section("總覽")
-                r.row("總營業額", "NT${"$"}%.0f".format(state.totalRevenue))
+                r.row("總營業額", "NT${"$"}%,.0f".format(state.totalRevenue))
                 r.row("總筆數", "${state.totalOrders} 筆")
-                r.row("平均客單", "NT${"$"}%.0f".format(state.avgOrderValue))
+                r.row("平均客單", "NT${"$"}%,.0f".format(state.avgOrderValue))
                 r.gap()
 
                 // ── 品項銷售排行 ──────────────────────────────────────
@@ -73,7 +73,7 @@ object ReportPdfBuilder {
                     r.body("（無資料）")
                 } else {
                     state.itemRanking.forEachIndexed { i, (name, qty) ->
-                        r.row("${i + 1}. $name", "$qty 份")
+                        r.row("${i + 1}. $name", "%,d 份".format(qty))
                     }
                 }
                 r.gap()
@@ -84,7 +84,7 @@ object ReportPdfBuilder {
                     r.body("（無資料）")
                 } else {
                     state.groupRanking.forEachIndexed { i, g ->
-                        r.row("${i + 1}. ${g.groupName}（${g.quantity}份）", "NT${"$"}%.0f".format(g.revenue))
+                        r.row("${i + 1}. ${g.groupName}（${"%,d".format(g.quantity)}份）", "NT${"$"}%,.0f".format(g.revenue))
                     }
                 }
 
@@ -99,11 +99,11 @@ object ReportPdfBuilder {
                         owi.items.forEach { item ->
                             r.row(
                                 "  ${item.name} × ${item.quantity}",
-                                "NT${"$"}%.0f".format(item.price * item.quantity)
+                                "NT${"$"}%,.0f".format(item.price * item.quantity)
                             )
                         }
                         val total = owi.items.sumOf { it.price * it.quantity }
-                        r.row("  小計", "NT${"$"}%.0f".format(total))
+                        r.row("  小計", "NT${"$"}%,.0f".format(total))
                         r.gap(4f)
                     }
                 }
@@ -257,10 +257,10 @@ object ReportPdfBuilder {
                     r.gap()
                     r.section("品項明細")
                     data.items.forEach { (name, qty, price) ->
-                        r.row("  $name × $qty", "NT${"$"}%.0f".format(price * qty))
+                        r.row("  $name × $qty", "NT${"$"}%,.0f".format(price * qty))
                     }
                     r.gap(4f)
-                    r.row("合計", "NT${"$"}%.0f".format(data.total))
+                    r.row("合計", "NT${"$"}%,.0f".format(data.total))
                     r.finish()
                     context.contentResolver.openOutputStream(uri)?.use { document.writeTo(it) }
                         ?: error("無法開啟輸出串流")

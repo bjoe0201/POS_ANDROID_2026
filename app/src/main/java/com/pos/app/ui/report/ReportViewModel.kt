@@ -314,17 +314,6 @@ class ReportViewModel @Inject constructor(
         }
     }
 
-    fun shouldConfirmReportDetailPrint(): Boolean {
-        val state = _uiState.value
-        return state.orders.size > 10 && isReportRangeOverOneDay(state)
-    }
-
-    private fun isReportRangeOverOneDay(state: ReportUiState): Boolean {
-        if (state.dateRange == DateRange.ALL) return true
-        val (start, end) = resolveDateBounds(state.dateRange, state.customStartDate, state.customEndDate)
-        return startOfDay(start) != startOfDay(end)
-    }
-
     private fun buildReportPrintSnapshot(
         state: ReportUiState,
         includeOrderDetails: Boolean

@@ -44,6 +44,7 @@ import java.util.Date
 import java.util.Locale
 
 enum class ExportFormat { CSV, PDF }
+private enum class PendingReportAction { NONE, PRINT, SAVE_PDF }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,18 +61,12 @@ fun ReportScreen(
     val fileNameSdf = remember { SimpleDateFormat("yyyyMMdd", Locale.getDefault()) }
     var showStartDatePicker by remember { mutableStateOf(false) }
     var showEndDatePicker by remember { mutableStateOf(false) }
-    var showReportDetailPrintDialog by remember { mutableStateOf(false) }
+    var pendingReportAction by remember { mutableStateOf(PendingReportAction.NONE) }
     var showExportDialog by remember { mutableStateOf(false) }
-    var pendingIncludeDetails by remember { mutableStateOf(true) }
+    var pendingIncludeDetails by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
-    val onReportPrintClick: () -> Unit = {
-        if (viewModel.shouldConfirmReportDetailPrint()) {
-            showReportDetailPrintDialog = true
-        } else {
-            viewModel.printCurrentReport(context, includeOrderDetails = true)
-        }
-    }
+    val onReportPrintClick: () -> Unit = { pendingReportAction = PendingReportAction.PRINT }
 
     val exportCsvLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("text/csv")
@@ -179,41 +174,18 @@ fun ReportScreen(
         )
     }
 
-    if (showReportDetailPrintDialog) {
-        AlertDialog(
-            onDismissRequest = { showReportDetailPrintDialog = false },
-            containerColor = t.surface,
-            title = { Text("列印明細確認", color = t.text, fontWeight = FontWeight.Bold) },
-            text = {
-                Text(
-                    "目前範圍超過 1 天，且共有 ${uiState.totalOrders} 筆訂單。\n\n列印訂單明細可能會印出很多紙，是否要包含「訂單明細」？",
-                    color = t.textSub
-                )
+    if (pendingReportAction != PendingReportAction.NONE) {
+        val isPrint = pendingReportAction == PendingReportAction.PRINT
+        ContentRangeDialog(
+            title = if (isPrint) "列印選項" else "存 PDF 選項",
+            confirmLabel = if (isPrint) "列印" else "存檔",
+            onDismiss = { pendingReportAction = PendingReportAction.NONE },
+            onConfirm = { includeDetails ->
+                pendingReportAction = PendingReportAction.NONE
+                if (isPrint) viewModel.printCurrentReport(context, includeOrderDetails = includeDetails)
+                else viewModel.savePdfNow(context, includeOrderDetails = includeDetails)
             },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showReportDetailPrintDialog = false
-                        viewModel.printCurrentReport(context, includeOrderDetails = true)
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = t.accent)
-                ) { Text("列印明細") }
-            },
-            dismissButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { showReportDetailPrintDialog = false }) {
-                        Text("取消", color = t.textSub)
-                    }
-                    TextButton(
-                        onClick = {
-                            showReportDetailPrintDialog = false
-                            viewModel.printCurrentReport(context, includeOrderDetails = false)
-                        }
-                    ) {
-                        Text("只印總覽", color = t.accent)
-                    }
-                }
-            }
+            t = t
         )
     }
 
@@ -364,7 +336,7 @@ fun ReportScreen(
                                 ReportActionButtons(
                                     uiState = uiState,
                                     onPrint = onReportPrintClick,
-                                    onSavePdf = { viewModel.savePdfNow(context) },
+                                    onSavePdf = { pendingReportAction = PendingReportAction.SAVE_PDF },
                                     onExport = { showExportDialog = true },
                                     t = t
                                 )
@@ -374,7 +346,7 @@ fun ReportScreen(
                             ReportActionButtons(
                                 uiState = uiState,
                                 onPrint = onReportPrintClick,
-                                onSavePdf = { viewModel.savePdfNow(context) },
+                                onSavePdf = { pendingReportAction = PendingReportAction.SAVE_PDF },
                                 onExport = { showExportDialog = true },
                                 t = t
                             )
@@ -385,9 +357,9 @@ fun ReportScreen(
                 // Stat cards 3-column grid
                 item {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        StatCard("總營業額", "NT${"$"}%.0f".format(uiState.totalRevenue), modifier = Modifier.weight(1f), t = t)
+                        StatCard("總營業額", "NT${"$"}%,.0f".format(uiState.totalRevenue), modifier = Modifier.weight(1f), t = t)
                         StatCard("總筆數", "${uiState.totalOrders} 筆", modifier = Modifier.weight(1f), t = t)
-                        StatCard("平均客單", "NT${"$"}%.0f".format(uiState.avgOrderValue), modifier = Modifier.weight(1f), t = t)
+                        StatCard("平均客單", "NT${"$"}%,.0f".format(uiState.avgOrderValue), modifier = Modifier.weight(1f), t = t)
                     }
                 }
 
@@ -415,7 +387,7 @@ fun ReportScreen(
                                                 Text("${idx + 1}", color = sliceColor, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(20.dp))
                                                 Text(name, color = t.text, fontSize = 14.sp)
                                             }
-                                            Text("$qty 份", color = t.accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                            Text("%,d 份".format(qty), color = t.accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                                         }
                                         Box(
                                             modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(t.border)
@@ -485,10 +457,10 @@ fun ReportScreen(
                                                 )
                                                 Column {
                                                     Text(group.groupName, color = t.text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                                                    Text("${group.quantity} 份", color = t.textMuted, fontSize = 12.sp)
+                                                    Text("%,d 份".format(group.quantity), color = t.textMuted, fontSize = 12.sp)
                                                 }
                                             }
-                                            Text("NT${"$"}%.0f".format(group.revenue), color = t.accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                            Text("NT${"$"}%,.0f".format(group.revenue), color = t.accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                                         }
                                         Box(
                                             modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(t.border)
@@ -637,7 +609,7 @@ private fun ExportOptionsDialog(
     t: PosColors
 ) {
     var selectedFormat by remember { mutableStateOf(ExportFormat.CSV) }
-    var includeDetails by remember { mutableStateOf(true) }
+    var includeDetails by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -666,18 +638,18 @@ private fun ExportOptionsDialog(
                     Text("內容範圍", color = t.textSub, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
-                            selected = includeDetails,
-                            onClick = { includeDetails = true },
-                            label = { Text("列印明細", fontSize = 13.sp) },
+                            selected = !includeDetails,
+                            onClick = { includeDetails = false },
+                            label = { Text("只含總覽", fontSize = 13.sp) },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = t.accent,
                                 selectedLabelColor = Color.White
                             )
                         )
                         FilterChip(
-                            selected = !includeDetails,
-                            onClick = { includeDetails = false },
-                            label = { Text("只印總覽", fontSize = 13.sp) },
+                            selected = includeDetails,
+                            onClick = { includeDetails = true },
+                            label = { Text("含明細", fontSize = 13.sp) },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = t.accent,
                                 selectedLabelColor = Color.White
@@ -778,7 +750,7 @@ private fun OrderSummaryRow(
                 Text(sdf.format(Date(owi.order.createdAt)), fontSize = 12.sp, color = t.textMuted)
             }
             Text(
-                "NT${"$"}%.0f".format(owi.items.sumOf { it.price * it.quantity }),
+                "NT${"$"}%,.0f".format(owi.items.sumOf { it.price * it.quantity }),
                 fontWeight = FontWeight.Bold,
                 fontSize = 15.sp,
                 color = if (isDeleted) t.textMuted else t.accent
@@ -807,7 +779,7 @@ private fun OrderSummaryRow(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("${item.name} × ${item.quantity}", fontSize = 13.sp, color = t.textSub)
-                    Text("NT${"$"}%.0f".format(item.price * item.quantity), fontSize = 13.sp, color = t.accent, fontWeight = FontWeight.SemiBold)
+                    Text("NT${"$"}%,.0f".format(item.price * item.quantity), fontSize = 13.sp, color = t.accent, fontWeight = FontWeight.SemiBold)
                 }
             }
             if (printDetailEnabled && !isDeleted) {
@@ -889,4 +861,54 @@ private fun PieChart(
             startAngle += sweep
         }
     }
+}
+
+@Composable
+private fun ContentRangeDialog(
+    title: String,
+    confirmLabel: String,
+    onDismiss: () -> Unit,
+    onConfirm: (includeDetails: Boolean) -> Unit,
+    t: PosColors
+) {
+    var includeDetails by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = t.surface,
+        title = { Text(title, color = t.text, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("內容範圍", color = t.textSub, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = !includeDetails,
+                        onClick = { includeDetails = false },
+                        label = { Text("只含總覽", fontSize = 13.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = t.accent,
+                            selectedLabelColor = Color.White
+                        )
+                    )
+                    FilterChip(
+                        selected = includeDetails,
+                        onClick = { includeDetails = true },
+                        label = { Text("含明細", fontSize = 13.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = t.accent,
+                            selectedLabelColor = Color.White
+                        )
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(includeDetails) },
+                colors = ButtonDefaults.buttonColors(containerColor = t.accent)
+            ) { Text(confirmLabel) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消", color = t.textSub) }
+        }
+    )
 }

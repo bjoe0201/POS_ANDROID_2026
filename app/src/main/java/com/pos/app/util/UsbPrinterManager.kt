@@ -319,12 +319,12 @@ object UsbPrinterManager {
             val sub = item.price * item.quantity
             lines += RL(
                 "${clipName(item.name)} ×${item.quantity}",
-                right = "NT${"$"}${"%.0f".format(sub)}"
+                right = "NT${"$"}${"%,.0f".format(sub)}"
             )
         }
         lines += RL("─".repeat(SEP), align = A.CENTER)
         lines += RL("項目數", right = "$totalQty")
-        lines += RL("合　計", right = "NT${"$"}${"%.0f".format(total)}", bold = true)
+        lines += RL("合　計", right = "NT${"$"}${"%,.0f".format(total)}", bold = true)
         lines += RL("═".repeat(SEP), align = A.CENTER)
         if (remark.isNotBlank()) {
             lines += RL.BLANK
@@ -349,10 +349,10 @@ object UsbPrinterManager {
         lines += RL("$tableName  ${sdf.format(Date(createdAt))}")
         lines += RL.BLANK
         items.forEach { item ->
-            lines += RL("${clipName(item.name)} ×${item.quantity}", right = "NT${"$"}${"%.0f".format(item.price * item.quantity)}")
+            lines += RL("${clipName(item.name)} ×${item.quantity}", right = "NT${"$"}${"%,.0f".format(item.price * item.quantity)}")
         }
         lines += RL("─".repeat(SEP), align = A.CENTER)
-        lines += RL("合　計", right = "NT${"$"}${"%.0f".format(total)}", bold = true)
+        lines += RL("合　計", right = "NT${"$"}${"%,.0f".format(total)}", bold = true)
         lines += RL("═".repeat(SEP), align = A.CENTER)
         lines += RL.BLANK
         lines += RL.BLANK
@@ -381,7 +381,7 @@ object UsbPrinterManager {
             lines += RL("（無資料）", align = A.CENTER)
         } else {
             snapshot.itemRanking.take(10).forEachIndexed { idx, (name, qty) ->
-                lines += RL("${idx + 1}. ${clipName(name)}", right = "×$qty")
+                lines += RL("${idx + 1}. ${clipName(name)}", right = "×${"%,d".format(qty)}")
             }
         }
 
@@ -392,7 +392,7 @@ object UsbPrinterManager {
         } else {
             snapshot.groupRanking.take(10).forEachIndexed { idx, group ->
                 lines += RL(
-                    "${idx + 1}. ${clipName(group.groupName)} ${group.quantity}份",
+                    "${idx + 1}. ${clipName(group.groupName)} ${"%,d".format(group.quantity)}份",
                     right = money(group.revenue)
                 )
             }
@@ -540,7 +540,7 @@ object UsbPrinterManager {
         return sb.toString()
     }
 
-    private fun money(value: Double): String = "NT${"$"}${"%.0f".format(value)}"
+    private fun money(value: Double): String = "NT${"$"}${"%,.0f".format(value)}"
 
     private fun renderBitmap(lines: List<RL>): Bitmap {
         val widthPx = PRINT_WIDTH_PX

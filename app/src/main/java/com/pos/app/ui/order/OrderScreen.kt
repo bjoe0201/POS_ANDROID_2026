@@ -234,7 +234,7 @@ fun OrderScreen(
             // TopBar
                 PosTopBar(title = "記帳點餐", subtitle = "火鍋店 POS", compact = compact, openCount = openCount, t = t, rightContent = {
                 lastCheckout?.let { (name, amt) ->
-                    Text("✓ $name NT${"$"}${amt.toLong()}", color = t.success, fontSize = 12.sp, modifier = Modifier.padding(end = 8.dp))
+                    Text("✓ $name NT${"$"}${"%,d".format(amt.toLong())}", color = t.success, fontSize = 12.sp, modifier = Modifier.padding(end = 8.dp))
                 }
                 val todayStart = startOfDay(System.currentTimeMillis())
                 val isToday = uiState.selectedDate == todayStart
@@ -400,7 +400,7 @@ private fun TableSelectorRow(tables: List<TableEntity>, selected: TableEntity?, 
                 Text(table.tableName, fontWeight = if (sel) FontWeight.Bold else FontWeight.SemiBold, fontSize = if (compact) 12.sp else 13.sp,
                     color = if (sel) Color.White else if (occ) t.occupied else t.textSub)
                 if (occ) {
-                    Text("NT${"$"}${tableTotal.toLong()}", fontSize = if (compact) 9.sp else 10.sp, fontWeight = FontWeight.Bold,
+                    Text("NT${"$"}${"%,d".format(tableTotal.toLong())}", fontSize = if (compact) 9.sp else 10.sp, fontWeight = FontWeight.Bold,
                         color = if (sel) Color.White.copy(0.85f) else t.occupied)
                 }
             }
@@ -506,7 +506,7 @@ private fun MenuCard(
                 maxLines = 2
             )
             Text(
-                "NT${"$"}${item.price.toLong()}",
+                "NT${"$"}${"%,d".format(item.price.toLong())}",
                 color = t.accent,
                 fontSize = if (compact) 12.sp else 13.sp,
                 fontWeight = FontWeight.ExtraBold
@@ -701,7 +701,7 @@ private fun OrderPanel(table: TableEntity?, order: List<OrderItemEntity>, total:
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(oi.name, color = t.text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                            Text("NT${"$"}${oi.price.toLong()} × ${oi.quantity} = NT${"$"}${(oi.price * oi.quantity).toLong()}",
+                            Text("NT${"$"}${"%,d".format(oi.price.toLong())} × ${oi.quantity} = NT${"$"}${"%,d".format((oi.price * oi.quantity).toLong())}",
                                 color = t.accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                         IconButton(onClick = { onDelete(oi) }, modifier = Modifier.size(28.dp)) {
@@ -730,7 +730,7 @@ private fun OrderPanel(table: TableEntity?, order: List<OrderItemEntity>, total:
             )
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("合計", color = t.textSub, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                Text("NT${"$"}${total.toLong()}", color = t.accent, fontSize = if (compact) 24.sp else 28.sp, fontWeight = FontWeight.ExtraBold)
+                Text("NT${"$"}${"%,d".format(total.toLong())}", color = t.accent, fontSize = if (compact) 24.sp else 28.sp, fontWeight = FontWeight.ExtraBold)
             }
             Button(
                 onClick = onCheckout,
@@ -823,13 +823,13 @@ private fun CheckoutDialog(tableName: String, orderItems: List<OrderItemEntity>,
                     orderItems.forEach { oi ->
                         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("${oi.name} × ${oi.quantity}", color = t.text, fontSize = 14.sp)
-                            Text("NT${"$"}${(oi.price * oi.quantity).toLong()}", color = t.accent, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("NT${"$"}${"%,d".format((oi.price * oi.quantity).toLong())}", color = t.accent, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         }
                     }
                 }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text("應收金額", color = t.text, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    Text("NT${"$"}${total.toLong()}", color = t.accent, fontSize = 36.sp, fontWeight = FontWeight.ExtraBold)
+                    Text("NT${"$"}${"%,d".format(total.toLong())}", color = t.accent, fontSize = 36.sp, fontWeight = FontWeight.ExtraBold)
                 }
                 OutlinedTextField(
                     value = remark, onValueChange = onRemarkChange,

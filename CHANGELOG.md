@@ -13,6 +13,27 @@ _尚無未發佈變更。_
 
 ---
 
+## [v1.2.17] - 2026-06-12
+
+**versionCode:** 25 · **下載：** [GitHub Release](https://github.com/bjoe0201/POS_ANDROID_2026/releases/tag/v1.2.17)
+
+### 報表列印按鈕整理 & 千位逗號
+
+#### 改善項目
+
+- **報表列印選項統一**：「報表列印」、「存 PDF」、「匯出報表」三個按鈕均改為彈出「內容範圍」選項對話框（只含總覽 / 含明細），預設選「只含總覽」，方便每日快速印出當日營業額。移除舊版只在訂單超過 10 筆且範圍超過 1 天才出現的條件式確認對話框。
+- **千位逗號**：記帳點餐、報表、熱感列印（收款收據、訂單明細、銷售報表）、PDF 匯出中，所有金額與大數字一律加上千位逗號（例如 `NT$1,234,567`）。
+
+#### 技術細節
+
+- `ReportScreen`：新增 `PendingReportAction` enum（`PRINT` / `SAVE_PDF`）與共用 `ContentRangeDialog` composable；移除 `showReportDetailPrintDialog`；`ExportOptionsDialog` 預設改為「只含總覽」，chip 標籤統一為「只含總覽 / 含明細」。
+- `ReportViewModel`：移除 `shouldConfirmReportDetailPrint()` 與 `isReportRangeOverOneDay()`。
+- `UsbPrinterManager`：`money()` 及所有 `%.0f` 改為 `%,.0f`；品項/群組排行數量改為 `%,d`。
+- `ReportPdfBuilder`：所有 `%.0f` 改為 `%,.0f`；品項/群組排行數量改為 `%,d`。
+- `OrderScreen`：所有 `.toLong()` 金額顯示改為 `"%,d".format(...)`（單價、小計、桌號金額、合計、結帳對話框金額）。
+
+---
+
 ## [v1.2.16] - 2026-06-11
 
 **versionCode:** 24 · **下載：** [GitHub Release](https://github.com/bjoe0201/POS_ANDROID_2026/releases/tag/v1.2.16)
